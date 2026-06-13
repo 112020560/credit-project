@@ -8,7 +8,6 @@
 
     <ItemGroup>
       <ProjectReference Include="..\..\Shared\SharedKernel\SharedKernel.csproj" />
-      <ProjectReference Include="..\..\src\shared\SharedKernel\SharedKernel.csproj" />
       <ProjectReference Include="..\Credit.Domain\Credit.Domain.csproj" />
     </ItemGroup>
 
