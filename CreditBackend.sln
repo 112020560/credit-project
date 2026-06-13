@@ -11,6 +11,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Credit.Application", "Src\C
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Credit.WebApi", "Src\Core\Credit.WebApi\Credit.WebApi.csproj", "{3EDFEF99-2277-4EB7-A7D8-EFEE470B6D54}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharedKernel", "Src\Shared\SharedKernel\SharedKernel.csproj", "{0369669D-A9EB-49B1-B5C4-37F55D1DDD39}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SmartCore.Telemetry", "Src\Shared\SmartCore.Telemetry\SmartCore.Telemetry.csproj", "{13B41453-162D-4151-A29D-EDF9EEA67F05}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -36,5 +40,13 @@ Global
 		{3EDFEF99-2277-4EB7-A7D8-EFEE470B6D54}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3EDFEF99-2277-4EB7-A7D8-EFEE470B6D54}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{3EDFEF99-2277-4EB7-A7D8-EFEE470B6D54}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0369669D-A9EB-49B1-B5C4-37F55D1DDD39}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0369669D-A9EB-49B1-B5C4-37F55D1DDD39}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0369669D-A9EB-49B1-B5C4-37F55D1DDD39}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0369669D-A9EB-49B1-B5C4-37F55D1DDD39}.Release|Any CPU.Build.0 = Release|Any CPU
+		{13B41453-162D-4151-A29D-EDF9EEA67F05}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{13B41453-162D-4151-A29D-EDF9EEA67F05}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{13B41453-162D-4151-A29D-EDF9EEA67F05}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{13B41453-162D-4151-A29D-EDF9EEA67F05}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
