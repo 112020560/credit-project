@@ -6,11 +6,13 @@
 |------|-----------|
 | Runtime | .NET 9 |
 | API | ASP.NET Core Minimal APIs |
-| ORM | Entity Framework Core 9 + Npgsql (PostgreSQL) |
+| Persistencia | Dapper + Npgsql (PostgreSQL) — sin EF Core |
 | CQRS / Mediator | MediatR 13 |
+| Validación | FluentValidation 11 |
+| Mapeo de objetos | Mapster 7 |
 | Mensajería | MassTransit 8 sobre RabbitMQ |
-| Observabilidad | OpenTelemetry + Serilog |
-| Versionado de API | Asp.Versioning (URL segment) |
+| Observabilidad | OpenTelemetry + Serilog (Seq) |
+| Documentación API | Swashbuckle / Swagger |
 
 ---
 
@@ -19,224 +21,334 @@
 ```
 Src/
 ├── Core/
-│   ├── Credit.Domain          — Modelo de dominio (entidades, agregados, servicios, eventos)
-│   ├── Credit.Application     — Casos de uso: comandos, queries y sus handlers
-│   ├── Credit.Infrastructure  — Persistencia (EF Core), mensajería, repositorios
-│   └── Credit.WebApi          — Endpoints HTTP, configuración de la app
+│   ├── CreditSystem.Domain          — Modelo de dominio: agregados, eventos, VO, motor de reglas, read models, abstracciones
+│   ├── CreditSystem.Application     — Casos de uso: comandos, queries, handlers, behaviors, jobs
+│   ├── CreditSystem.Infrastructure  — Event store, projection store, repos, workers, mensajería, webhooks
+│   ├── CreditSystem.Api             — Endpoints HTTP, Program.cs, manejo global de excepciones
+│   └── CreditSystem.Tests           — Tests unitarios e integración
 └── Shared/
-    ├── SharedKernel           — Tipos compartidos: Result<T>, Error, contratos de integración
-    └── SmartCore.Telemetry    — Configuración centralizada de OpenTelemetry y Serilog
+    ├── SharedKernel                 — Contratos de integración (eventos de integración, mensajes de pago)
+    └── SmartCore.Telemetry          — Configuración centralizada de OpenTelemetry y Serilog
 ```
 
 **Dependencias entre capas:**
 
 ```
-WebApi → Application + Infrastructure
-Application → Domain + SharedKernel
-Infrastructure → Domain + Application + SharedKernel
-Domain (sin dependencias externas)
+CreditSystem.Api → CreditSystem.Application + CreditSystem.Infrastructure + SmartCore.Telemetry
+CreditSystem.Application → CreditSystem.Domain
+CreditSystem.Infrastructure → CreditSystem.Domain + CreditSystem.Application + SharedKernel
+CreditSystem.Domain (sin dependencias de frameworks externos)
 ```
 
 ---
 
-## Clean Architecture + DDD
+## Clean Architecture + DDD + Event Sourcing
 
-El proyecto sigue Clean Architecture. El dominio no depende de ningún framework externo; toda la lógica de negocio vive en `Credit.Domain`.
+### Agregados
 
-### Modelo de dominio
+El sistema tiene dos agregados de dominio con Event Sourcing puro. El estado de cada agregado es un `record` inmutable (`*State`) actualizado mediante una función pura `ApplyEvent`. Los eventos se acumulan en `UncommittedEvents` y se persisten en el event store al completar el comando.
 
-#### Entidades EF Core (`Credit.Domain/Entities/`)
-Son las entidades mapeadas directamente a la base de datos por EF Core. Se usan en operaciones de lectura y persistencia transaccional directa.
+#### `LoanContractAggregate` (`CreditSystem.Domain/Aggregates/LoanContract/`)
 
-| Entidad | Tabla | Descripción |
-|---------|-------|-------------|
-| `Customer` | `customers` | Cliente en el sistema de crédito. Se sincroniza desde el microservicio CRM vía eventos |
-| `CreditProduct` | `credit_products` | Producto crediticio con tasa, método de amortización, montos y plazo |
-| `CreditApplication` | `credit_applications` | Solicitud de crédito de un cliente para un producto |
-| `CreditLine` | `credit_lines` | Línea de crédito activa creada al aprobar una aplicación. Almacena el schedule de amortización como `jsonb` |
-| `Installment` | `installments` | Cuotas individuales de una línea de crédito |
-| `CreditPayment` | `credit_payments` | Pagos registrados contra una línea de crédito |
-| `DomainEvent` | `domain_events` | Outbox de eventos de dominio para publicación asíncrona confiable |
+Gestiona el ciclo de vida completo de un préstamo a plazo fijo.
 
-#### Agregado `CreditAgreement` (`Credit.Domain/CreditAgreement.cs`)
-Agregado de dominio que encapsula el ciclo de vida completo de un crédito con una máquina de estados explícita. Acumula `DomainEvent`s en `UncommittedEvents` y soporta rehidratación desde historial (Event Sourcing).
-
-**Estados del crédito:**
+**Máquina de estados:**
 
 ```
-Created → Approved → Funded → Active ──→ Late
-                                  └────→ Closed
-                                  Late ──→ Closed
+Approved → Active ──────→ Delinquent ──→ Default
+                 └──────→ PaidOff        └──→ PaidOff (via Restructure → Active)
 ```
 
-Operaciones disponibles: `Approve()`, `Fund()`, `RegisterPayment()`, `MarkAsLate()`, `Close()`.
+**Operaciones:** `Create()` (factory), `Disburse()`, `ApplyPayment()`, `AccrueInterest()`, `RecordMissedPayment()`, `MarkAsDefault()`, `Restructure()`.
 
-#### Agregado `CreditContract` (`Credit.Domain/Aggregates/CreditContract.cs`)
-Agregado alternativo más liviano orientado a la gestión de saldo (principal + interés outstanding) y aplicación de pagos con breakdown detallado (`PaymentBreakdown`). Hereda de `AggregateRoot`.
+**Eventos de dominio:**
+- `ContractCreated`, `LoanDisbursed`, `PaymentApplied`, `InterestAccrued`
+- `PaymentMissed`, `ContractDefaulted`, `ContractRestructured`, `ContractPaidOff`
 
-#### Value Objects (`Credit.Domain/ValueObjects/`)
-- `Money` — monto + moneda, previene mezcla de divisas
-- `CreditId` — identificador tipado del crédito
-- `DateRange` — rango de fechas con validación
-- `PaymentBreakdown` — descomposición de un pago en penalidad, interés y capital
-- `ApplyPayment` — parámetros de aplicación de pago
+**Auto-default:** al registrar un pago perdido con `daysOverdue >= 90`, el agregado lanza automáticamente `ContractDefaulted`.
+
+#### `RevolvingCreditAggregate` (`CreditSystem.Domain/Aggregates/RevolvingCredit/`)
+
+Gestiona líneas de crédito revolventes (tipo tarjeta de crédito).
+
+**Máquina de estados:**
+
+```
+Pending → Active ⇄ Frozen → Closed
+```
+
+**Operaciones:** `Create()`, `Activate()`, `DrawFunds()`, `ApplyPayment()`, `AccrueInterest()`, `GenerateStatement()`, `Freeze()`, `Unfreeze()`, `ChangeCreditLimit()`, `Close()`.
+
+**Eventos de dominio:**
+- `CreditLineCreated`, `CreditLineActivated`, `FundsDrawn`
+- `RevolvingPaymentApplied`, `RevolvingInterestAccrued`, `StatementGenerated`
+- `CreditLineFrozen`, `CreditLineUnfrozen`, `CreditLimitChanged`, `CreditLineClosed`
+
+**Auto-unfreeze:** si la línea está `Frozen` y el pago cubre el mínimo, se aplica `CreditLineUnfrozen` automáticamente.
+
+### Value Objects (`CreditSystem.Domain/ValueObjects/`)
+
+| Value Object | Descripción |
+|---|---|
+| `Money` | Monto + moneda. Previene mezcla de divisas. Soporta operadores `+`, `-`, `>`. |
+| `InterestRate` | Tasa de interés. Expone `CalculateDailyInterest(Money balance)`. |
+| `AmortizationEntry` | Una cuota individual: número, fecha de vencimiento, capital, interés, saldo. |
+| `PaymentSchedule` | Lista de `AmortizationEntry`. Tiene `Calculate()` estático para amortización francesa básica. |
+
+### Entidades (`CreditSystem.Domain/Entities/`)
+
+| Entidad | Descripción |
+|---|---|
+| `CustomerReference` | Referencia local al cliente (sincronizado desde CRM). |
+| `OutboxMessage` | Mensaje en espera de publicación asíncrona (patrón Outbox). |
+| `WebhookSubscription` | Suscripción a eventos via webhook HTTP. |
+
+### Read Models (`CreditSystem.Domain/Models/ReadModels/`)
+
+Proyecciones desnormalizadas para queries rápidas sin rehidratación de eventos:
+`LoanSummaryReadModel`, `DelinquentLoanReadModel`, `PaymentHistoryReadModel`, `LoanPortfolioReadModel`, `ActiveLoanForAccrual`, `OverdueLoanInfo`, `DefaultedLoanReadModel`, `PaidOffLoanReadModel`, `CustomerLoansReadModel`, `UpcomingPaymentReadModel`, `RevolvingCreditSummaryReadModel`, `RevolvingTransactionReadModel`, `RevolvingStatementReadModel`, `PaymentTrackingReadModel`.
 
 ---
 
-## CQRS
+## Motor de Reglas de Crédito
 
-Todos los casos de uso están en `Credit.Application` y siguen el patrón CQRS implementado con MediatR.
+`ContractEngine` (`CreditSystem.Domain/Rules/`) evalúa un conjunto priorizado de reglas antes de crear un contrato. Puede aprobar o rechazar la solicitud y ajustar la tasa de interés.
 
-```
-ICommand              → IRequest<Result>
-ICommand<TResponse>   → IRequest<Result<TResponse>>
-IQuery<TResponse>     → IRequest<Result<TResponse>>
-```
+**Reglas disponibles:**
 
-Los handlers se registran automáticamente en `Program.cs` escaneando el assembly de `Credit.Application`:
+| Regla | Tipo | Acción |
+|---|---|---|
+| `CreditScoreRule` | Hard stop | Rechaza si el score es insuficiente |
+| `DebtToIncomeRule` | Hard stop | Rechaza si DTI supera el umbral |
+| `CollateralRule` | Soft | Ajusta tasa si hay colateral |
+| `MaxLoanAmountRule` | Hard stop | Rechaza si el monto supera el máximo permitido |
+| `ActiveLoansRule` | Soft | Penaliza tasa por préstamos activos existentes |
 
-```csharp
-builder.Services.AddMediatR(cfg =>
-    cfg.RegisterServicesFromAssembly(typeof(GetCustomerCreditStatusQuery).Assembly));
-```
-
-### Casos de uso existentes
-
-| Área | Comando / Query |
-|------|----------------|
-| Aplicaciones | `CreateCreditApplicationCommand`, `ApproveCreditApplicationCommand`, `RejectCreditApplicationCommand`, `GetCreditApplicationByIdQuery` |
-| Líneas de crédito | `CloseCreditLineCommand`, `GetCreditLineByIdQuery`, `GetCreditLineBalanceByIdQuery`, `ListCustomerCreditLinesQuery`, `GetCreditLineInstallmentsByIdQuery`, `GetLinePaymentScheduleByIdQuery`, `GetLinePaymentsByIdQuery` |
-| Pagos | `RegisterPaymentCommand`, `GetAmortizationScheduleQuery`, `GetInstallmentsDueQuery`, `GetLineInstallmentsByIdQuery` |
-| Contratos (event-sourced) | `CreateCreditContract`, `DisburseLoan`, `ApplyPayment` |
-
----
-
-## Result Pattern
-
-Todas las operaciones retornan `Result` o `Result<T>` definidos en `SharedKernel`. Nunca se lanzan excepciones para fallos esperados.
-
-```csharp
-// Éxito con valor
-Result<MiDto>.Success(dto)
-
-// Fallo con error tipado
-Result.Failure(new Error("Credit.NotFound", "Línea de crédito no encontrada", ErrorType.NotFound))
-
-// En endpoints
-result.Match(
-    onSuccess: () => Results.Ok(),
-    onFailure: error => CustomResults.Problem(error)
-)
-```
-
-`Error` contiene `Code`, `Description` y `ErrorType` (que mapea a status HTTP en `CustomResults`).
-
----
-
-## Endpoints HTTP
-
-Los endpoints usan el patrón **Minimal API + IEndpoint**. Cada grupo funcional implementa la interfaz `IEndpoint`:
-
-```csharp
-public interface IEndpoint
-{
-    void MapEndpoint(IEndpointRouteBuilder app);
-}
-```
-
-En `Program.cs` se auto-descubren todas las implementaciones por reflexión y se registran bajo el prefijo `api/v{version}`. Para agregar endpoints, basta crear una clase que implemente `IEndpoint` en `Credit.WebApi/Endpoints/`.
-
-**Versionado:** URL segment — `api/v1/credit/applications`. La versión por defecto es `1`.
+**Flujo:** reglas ordenadas por `Priority` → si falla un `IHardStopRule`, se detiene la evaluación → la tasa final = `BaseRate (8%)` + suma de ajustes de reglas.
 
 ---
 
 ## Motor de Amortización
 
-Vive en `Credit.Domain` como servicio de dominio. Usa el patrón Strategy:
+Vive en `CreditSystem.Domain/Services/Amortization/`. Usa el patrón Factory:
 
 ```
-AmortizationEngine / AmortizationScheduleService
-    ├── FrenchAmortizationStrategy    (cuotas iguales, sistema francés)
-    ├── GermanAmortizationStrategy    (capital constante)
-    ├── AmericanAmortizationStrategy  (bullet / solo interés + capital al final)
-    ├── FlatAmortizationStrategy      (interés plano sobre capital original)
-    └── RevolvingAmortizationStrategy (crédito revolvente)
+AmortizationCalculatorFactory (IAmortizationCalculatorFactory)
+    ├── FrenchAmortizationCalculator    (cuotas iguales, sistema francés)
+    ├── GermanAmortizationCalculator    (capital constante)
+    ├── FlatAmortizationCalculator      (interés plano sobre capital original)
+    ├── AmericanAmortizationCalculator  (bullet / solo interés + capital al final)
+    └── InterestOnlyAmortizationCalculator
 ```
 
-La estrategia se selecciona por `AmortizationMethod` (enum) configurado en el `CreditProduct`. Las estrategias se registran como singletons en `Infrastructure/DependencyInjection.cs`.
+La calculadora se selecciona por `AmortizationMethod` (enum) al crear el `LoanContractAggregate`. El resultado es un `PaymentSchedule` con la lista de `AmortizationEntry`.
 
-El resultado es un `AmortizationSchedule` con la lista de `Installment` (número, fecha de vencimiento, capital, interés, saldo restante).
+Para agregar un método: implementar `IAmortizationCalculator` y registrarlo en `AmortizationCalculatorFactory`.
+
+---
+
+## CQRS
+
+Todos los casos de uso están en `CreditSystem.Application` y siguen CQRS con MediatR.
+
+**Pipeline behaviors (en orden):**
+1. `ValidationBehavior` — ejecuta los validators de FluentValidation y lanza excepción si falla
+2. `LoggingBehavior` — registra duración y resultado del handler
+
+**Handlers de comandos:**
+
+| Área | Comando |
+|---|---|
+| Préstamo | `CreateContractCommand`, `DisburseLoanCommand`, `ApplyPaymentCommand`, `DefaultContractCommand`, `RestructureContractCommand`, `PayoffContractCommand` |
+| Crédito revolvente | `CreateCreditLineCommand`, `ActivateCreditLineCommand`, `DrawFundsCommand`, `ApplyRevolvingPaymentCommand`, `FreezeCreditLineCommand`, `UnfreezeCreditLineCommand`, `ChangeCreditLimitCommand`, `CloseCreditLineCommand` |
+
+**Handlers de queries:**
+
+| Query | Resultado |
+|---|---|
+| `GetLoanSummaryQuery` | `LoanSummaryResponse` |
+| `GetPaymentHistoryQuery` | `IList<PaymentHistoryResponse>` |
+| `GetDelinquentLoansQuery` | `IList<DelinquentLoanResponse>` |
+| `GetDefaultedLoansQuery` | `IList<DefaultedLoanResponse>` |
+| `GetRestructureHistoryQuery` | `IList<RestructureHistoryResponse>` |
+| `GetPayoffAmountQuery` | `PayoffAmountResponse` |
+| `GetPaidOffLoansQuery` | `IList<PaidOffLoanResponse>` |
+| `GetRevolvingCreditSummaryQuery` | `RevolvingCreditSummaryResponse` |
+| `GetRevolvingTransactionsQuery` | `IList<RevolvingTransactionResponse>` |
+
+---
+
+## Endpoints HTTP
+
+Sin versionado de URL. Grupos registrados como métodos de extensión estáticos en `Program.cs`:
+
+### `/api/loans` — Loan Contracts
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| POST | `/api/loans` | Crear contrato (evalúa reglas + calcula amortización) |
+| POST | `/api/loans/{id}/disburse` | Desembolsar préstamo aprobado |
+| GET | `/api/loans/{id}` | Resumen del préstamo |
+| GET | `/api/loans/customer/{externalCustomerId}` | Préstamos de un cliente |
+| POST | `/api/loans/{id}/payments` | Aplicar pago |
+| GET | `/api/loans/{id}/payments` | Historial de pagos |
+| POST | `/api/loans/{id}/default` | Marcar como default |
+| GET | `/api/loans/defaulted` | Listar préstamos en default |
+| POST | `/api/loans/{id}/restructure` | Reestructurar préstamo |
+| GET | `/api/loans/{id}/restructure-history` | Historial de reestructuraciones |
+| GET | `/api/loans/{id}/payoff-amount` | Monto de payoff |
+| POST | `/api/loans/{id}/payoff` | Pagar préstamo completo |
+| GET | `/api/loans/paid-off` | Listar préstamos pagados |
+
+### `/api/delinquent-loans` — Préstamos morosos
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/delinquent-loans` | Listar morosos (filtros: `minDaysOverdue`, `collectionStatus`) |
+| GET | `/api/delinquent-loans/{id}` | Detalle de préstamo moroso |
+
+### `/api/revolving-credits` — Crédito Revolvente
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| POST | `/api/revolving-credits` | Crear línea de crédito |
+| POST | `/api/revolving-credits/{id}/activate` | Activar línea |
+| POST | `/api/revolving-credits/{id}/draw` | Disponer fondos |
+| POST | `/api/revolving-credits/{id}/payments` | Aplicar pago |
+| POST | `/api/revolving-credits/{id}/freeze` | Congelar línea |
+| POST | `/api/revolving-credits/{id}/unfreeze` | Descongelar línea |
+| POST | `/api/revolving-credits/{id}/change-limit` | Cambiar límite de crédito |
+| POST | `/api/revolving-credits/{id}/close` | Cerrar línea |
+| GET | `/api/revolving-credits/{id}` | Resumen de la línea |
+| GET | `/api/revolving-credits/{id}/transactions` | Transacciones de la línea |
+
+### `/api/admin` — Administración
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| POST | `/api/admin/jobs/interest-accrual` | Disparar acumulación de interés manualmente |
+| POST | `/api/admin/loans/{id}/accrue-interest` | Acumular interés a un préstamo específico |
+| POST | `/api/admin/jobs/payment-missed` | Disparar detección de pagos perdidos |
+| POST | `/api/admin/jobs/revolving-interest-accrual` | Disparar acumulación de interés revolvente |
 
 ---
 
 ## Infraestructura
 
-### Persistencia
+### Event Store
 
-- **Base de datos:** PostgreSQL con extensión `uuid-ossp` para generación de UUIDs.
-- **ORM:** EF Core. El `CreditDbContext` está scaffoldeado; las configuraciones de entidades están en `OnModelCreating`.
-- **Convención:** todas las columnas en `snake_case`, PKs con `uuid_generate_v4()` como valor por defecto.
-- **Connection string:** clave `DefaultConnection` en `appsettings.json`.
-- **Campos JSON:** `AmortizationSchedule`, `Score`, `Documents`, `Metadata`, `Address` se almacenan como `jsonb`.
+`PostgresEventStore` persiste eventos en PostgreSQL usando Dapper. Modelos de datos:
+- `EventStream` — stream por agregado (id + tipo + versión)
+- `StoredEvent` — evento individual serializado como JSON
+- `EventSnapshot` — snapshot del estado para optimizar rehidratación
+- `EventMetadata` — metadatos de correlación
 
-### Mensajería (Integración entre microservicios)
+Serialización: `JsonEventSerializer`. Integridad: `Sha256HashGenerator`.
 
-MassTransit sobre RabbitMQ. Configuración en `RabbitMqSettings:Uri`.
+### Sistema de Proyecciones
 
-**Eventos consumidos:**
+Tras guardar eventos, `ProjectionEngine` ejecuta todos los `IProjection` registrados:
 
-| Evento | Consumer | Acción |
-|--------|----------|--------|
-| `SaleInvoiceConfirmedEvent` | `SaleInvoiceConfirmedConsumer` | Crea automáticamente una `CreditLine` con schedule de amortización cuando se confirma una factura de venta a crédito. Incluye idempotencia por `InvoiceNumber`. |
+| Projector | Read Model actualizado |
+|---|---|
+| `LoanSummaryProjector` | `loan_summaries` |
+| `DelinquentLoansProjector` | `delinquent_loans` |
+| `PaymentHistoryProjector` | `payment_history` |
+| `LoanPortfolioProjector` | `loan_portfolio` |
+| `RevolvingCreditSummaryProjector` | `revolving_credit_summaries` |
+| `PaymentTrackingProjector` | `payment_tracking` |
 
-**Contratos compartidos (`SharedKernel/Contracts/`):**
+`PostgresProjectionStore` (Dapper) gestiona el upsert de las proyecciones.
 
-| Contrato | Dirección |
-|----------|-----------|
-| `CustomerCreated` | Recibido desde CRM |
-| `CustomerUpdated` | Recibido desde CRM |
-| `ProcessPaymentCommand` | Publicado para procesar pagos async |
-| `ProcessRevolvingPaymentCommand` | Publicado para créditos revolventes |
+### Background Workers
+
+| Worker | Función |
+|---|---|
+| `InterestAccrualWorker` | Acumula interés diario en préstamos activos |
+| `PaymentMissedWorker` | Detecta cuotas vencidas y registra `PaymentMissed` |
+| `RevolvingInterestAccrualWorker` | Acumula interés en líneas revolventes activas |
+| `StatementGenerationWorker` | Genera estados de cuenta revolventes en la fecha de ciclo |
+| `RevolvingPaymentMissedWorker` | Detecta pagos mínimos no realizados en crédito revolvente |
+| `OutboxPublisherWorker` | Publica mensajes pendientes del outbox vía MassTransit |
+| `WebhookDeliveryWorker` | Entrega notificaciones webhook a suscriptores HTTP |
+
+### Mensajería (MassTransit / RabbitMQ)
+
+**Consumers (mensajes recibidos):**
+
+| Cola | Consumer | Acción |
+|---|---|---|
+| `credit-service-customer-events` | `CustomerCreatedConsumer` | Sincroniza cliente desde CRM |
+| `credit-service-customer-events` | `CustomerUpdatedConsumer` | Actualiza cliente desde CRM |
+| `credit-service-payments` | `ProcessPaymentConsumer` | Procesa pagos de préstamos de forma asíncrona |
+| `credit-service-payments` | `ProcessRevolvingPaymentConsumer` | Procesa pagos revolventes de forma asíncrona |
+
+La cola de pagos tiene retry automático: 5s → 15s → 30s.
+
+**Contratos compartidos (`SharedKernel/Contracts/`):** `CustomerCreated`, `CustomerUpdated`, mensajes de pago (`PaymentMessages`).
+
+### Webhooks
+
+El sistema permite suscripciones a eventos de dominio vía HTTP callbacks:
+- `WebhookSubscriptionRepository` — gestiona suscripciones
+- `WebhookDeliveryRepository` — registra intentos de entrega
+- `WebhookNotifier` — crea los registros de entrega pendientes
+- `WebhookDeliveryWorker` — envía las notificaciones con `HttpClient` (timeout 30s)
 
 ### Observabilidad
 
 `SmartCore.Telemetry` configura en un solo lugar:
-- **Trazas:** ASP.NET Core, EF Core, HTTP client, MassTransit
-- **Métricas:** Runtime, ASP.NET Core
-- **Logs:** Serilog con sink a OpenTelemetry Protocol (OTLP)
-- **Exportador:** OTLP (configurable vía `TelemetryOptions`)
+- **Trazas:** ASP.NET Core, HTTP client, MassTransit
+- **Logs:** Serilog con sink a Seq y OTLP
+- **Configuración:** `Telemetry:OtlpEndpoint` en `appsettings.json`
 
 ---
 
-## Flujo típico: Factura → Crédito
+## Flujo típico: Crear y desembolsar un préstamo
 
 ```
-[Microservicio Ventas]
+POST /api/loans
+        │ CreateContractCommand (MediatR)
         │
-        │ publica SaleInvoiceConfirmedEvent (RabbitMQ)
-        ▼
-[SaleInvoiceConfirmedConsumer]
+        ├── ValidationBehavior (FluentValidation)
+        ├── ContractEngine evalúa reglas (CreditScore, DTI, Collateral, etc.)
+        ├── AmortizationCalculatorFactory selecciona calculadora por AmortizationMethod
+        ├── LoanContractAggregate.Create() → evento ContractCreated
+        ├── PostgresEventStore.AppendAsync() → persiste eventos
+        ├── ProjectionEngine → actualiza loan_summaries, loan_portfolio
+        └── Responde 201 Created con ContractId
+
+POST /api/loans/{id}/disburse
+        │ DisburseLoanCommand
         │
-        ├── Valida idempotencia (InvoiceNumber)
-        ├── Busca Customer por ExternalId
-        ├── Carga CreditProduct
-        ├── Calcula AmortizationSchedule
-        └── Persiste CreditLine + Installments → PostgreSQL
+        ├── LoanContractRepository.LoadAsync() → rehidrata agregado desde eventos
+        ├── aggregate.Disburse() → evento LoanDisbursed
+        ├── PostgresEventStore.AppendAsync() → persiste
+        └── ProjectionEngine → actualiza loan_summaries (status: Active)
 ```
 
-## Flujo típico: Solicitud manual de crédito
+## Flujo típico: Aplicar un pago
 
 ```
-POST /api/v1/credit/applications
-        │ CreateCreditApplicationCommand (MediatR)
-        ▼
-POST /api/v1/credit/applications/{id}/approve
-        │ ApproveCreditApplicationCommand
-        ▼
-[CreditLine creada con schedule]
+POST /api/loans/{id}/payments
+        │ ApplyPaymentCommand
         │
-POST /api/v1/credit/lines/{id}/payments  (futuro)
-        │ RegisterPaymentCommand
-        ▼
-[Installments actualizadas, CreditLine Outstanding reducido]
+        ├── Rehidrata LoanContractAggregate
+        ├── aggregate.ApplyPayment() — aplica en orden: fees → interés → principal
+        │       └── Si balance = 0: emite ContractPaidOff automáticamente
+        ├── Persiste eventos
+        └── Proyecciones actualizadas (payment_history, loan_summaries)
+```
+
+## Flujo típico: Worker de interés
+
+```
+InterestAccrualWorker (IHostedService, periódico)
+        │
+        ├── ILoanQueryService.GetActiveLoansForAccrualAsync()
+        ├── Por cada préstamo activo:
+        │   ├── Rehidrata LoanContractAggregate
+        │   ├── aggregate.AccrueInterest(periodStart, periodEnd)
+        │   └── Persiste evento InterestAccrued
+        └── ProjectionEngine → actualiza loan_summaries
 ```
