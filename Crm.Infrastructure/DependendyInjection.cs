@@ -1,5 +1,6 @@
 ﻿using Crm.Application.Abstractions.Mq;
 using Crm.Domain.Abstractions.Persistence;
+using Crm.Domain.RiskEngine;
 using Crm.Infrastructure.Adapters.Outbound.EntityFramework;
 using Crm.Infrastructure.Adapters.Outbound.EntityFramework.Repositories;
 using Crm.Infrastructure.Adapters.Outbound.Messaging.RabbitMq;
@@ -34,7 +35,17 @@ public static class DependencyInjection
                 .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking)
         );
         services.AddScoped<ICustomersRepository, CustomersRepository>();
+        services.AddScoped<IProspectsRepository, ProspectsRepository>();
+        services.AddScoped<ICreditApplicationsRepository, CreditApplicationsRepository>();
+        services.AddScoped<IRiskRulesRepository, RiskRulesRepository>();
+        services.AddScoped<IRiskMatrixRepository, RiskMatrixRepository>();
+        services.AddScoped<IRiskEvaluationsRepository, RiskEvaluationsRepository>();
+        services.AddScoped<IDocumentsRepository, DocumentsRepository>();
+        services.AddScoped<IDocumentTypesRepository, DocumentTypesRepository>();
+        services.AddScoped<IWorkflowDefinitionsRepository, WorkflowDefinitionsRepository>();
+        services.AddScoped<IApprovalDecisionsRepository, ApprovalDecisionsRepository>();
 
+        services.AddScoped<IRiskEngine, RiskEngineService>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         return services;

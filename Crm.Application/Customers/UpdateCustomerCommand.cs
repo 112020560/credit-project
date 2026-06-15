@@ -36,18 +36,16 @@ internal sealed class UpdateCustomerCommandHandler(
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         await mqProducerService.PublishEvent(
-            new
-            {
-                CustomerId = customer.Id,
-                UpdatedAt = DateTimeOffset.UtcNow,
-                Version = 1,
-                Changes = (IDictionary<string, object>)new Dictionary<string, object>
+            new CustomerUpdatedContract(
+                customer.Id,
+                DateTimeOffset.UtcNow,
+                1,
+                new Dictionary<string, object>
                 {
                     ["FullName"] = customer.FullName,
                     ["DisplayName"] = customer.DisplayName ?? string.Empty,
                     ["IdentificationNumber"] = customer.IdentificationNumber ?? string.Empty
-                }
-            },
+                }),
             Guid.NewGuid().ToString("N"),
             cancellationToken);
 

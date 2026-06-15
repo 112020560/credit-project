@@ -1,4 +1,6 @@
 ﻿using Crm.Application.Abstractions.Behaviors;
+using Crm.Application.ApprovalWorkflows;
+using Crm.Application.RiskEngine;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -17,6 +19,9 @@ public static class DependencyInjection
         });
 
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly, includeInternalTypes: true);
+
+        services.AddScoped<RiskEvaluationService>();
+        services.AddScoped<ApprovalWorkflowService>();
 
         return services;
     }
