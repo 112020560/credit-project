@@ -1,8 +1,11 @@
 using Crm.Application.Abstractions.Messaging;
 using Crm.Application.Abstractions.Mq;
 using Crm.Application.ApprovalWorkflows.Dtos;
+using Crm.Application.CreditApplications.Dtos;
 using Crm.Application.Customers.Dtos;
+using Crm.Application.Prospects.Dtos;
 using Crm.Application.RiskEngine;
+using Crm.Application.RiskEngine.Dtos;
 using Crm.Domain.Abstractions.Persistence;
 using Crm.Domain.CreditApplications;
 using Crm.Domain.Customers;
@@ -94,7 +97,7 @@ internal sealed class SubmitCreditApplicationCommandHandler(
 
         var traceId = Guid.NewGuid().ToString("N");
 
-        await mqProducerService.PublishEvent(new { ApplicationId = application.Id, application.ProspectId }, traceId, cancellationToken);
+        await mqProducerService.PublishEvent(new CreditApplicationSubmittedContract { ApplicationId = application.Id, ProspectId = application.ProspectId }, traceId, cancellationToken);
 
         if (evaluation.Outcome == RiskEvaluationOutcome.ManualReview && application.WorkflowDefinitionId.HasValue)
         {
@@ -105,21 +108,21 @@ internal sealed class SubmitCreditApplicationCommandHandler(
                     new ApprovalRequestedContract(application.Id, wf!.Id, firstStep.Id, firstStep.StepName, firstStep.Order, DateTime.UtcNow),
                     traceId, cancellationToken);
         }
-        await mqProducerService.PublishEvent(new
+        await mqProducerService.PublishEvent(new RiskEvaluationCompletedContract
         {
-            evaluation.Id,
-            evaluation.CreditApplicationId,
-            evaluation.RiskMatrixId,
-            evaluation.RiskMatrixVersion,
-            evaluation.TotalScore,
-            evaluation.Outcome,
+            RiskEvaluationId = evaluation.Id,
+            CreditApplicationId = evaluation.CreditApplicationId,
+            RiskMatrixId = evaluation.RiskMatrixId,
+            RiskMatrixVersion = evaluation.RiskMatrixVersion,
+            TotalScore = evaluation.TotalScore,
+            Outcome = evaluation.Outcome.ToString(),
             CompletedAt = evaluation.EvaluatedAt
         }, traceId, cancellationToken);
 
         if (evaluation.Outcome == RiskEvaluationOutcome.AutoApprove && createdCustomer is not null)
         {
-            await mqProducerService.PublishEvent(new { ApplicationId = application.Id, prospect.Id, Status = CreditApplicationStatus.Approved }, traceId, cancellationToken);
-            await mqProducerService.PublishEvent(new { ProspectId = prospect.Id, CustomerId = createdCustomer.Id }, traceId, cancellationToken);
+            await mqProducerService.PublishEvent(new CreditApplicationApprovedContract { ApplicationId = application.Id, ProspectId = prospect.Id, Status = CreditApplicationStatus.Approved.ToString() }, traceId, cancellationToken);
+            await mqProducerService.PublishEvent(new ProspectConvertedContract { ProspectId = prospect.Id, CustomerId = createdCustomer.Id }, traceId, cancellationToken);
 
             var contract = new CreateCustomerContract
             {
@@ -140,7 +143,7 @@ internal sealed class SubmitCreditApplicationCommandHandler(
         }
         else if (evaluation.Outcome == RiskEvaluationOutcome.AutoReject)
         {
-            await mqProducerService.PublishEvent(new { ApplicationId = application.Id, application.ProspectId, application.RejectionReason }, traceId, cancellationToken);
+            await mqProducerService.PublishEvent(new CreditApplicationRejectedContract { ApplicationId = application.Id, ProspectId = application.ProspectId, RejectionReason = application.RejectionReason }, traceId, cancellationToken);
         }
 
         return Result.Success();

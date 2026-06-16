@@ -10,7 +10,7 @@ public class ProspectsEnrich : IEndpoint
 {
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
-        app.MapPut("/prospects/{id:guid}", async (Guid id, IMediator mediator, EnrichProspectDto request, CancellationToken ct) =>
+        app.MapPut("/prospects/{id:guid}/enrich", async (Guid id, IMediator mediator, EnrichProspectDto request, CancellationToken ct) =>
         {
             var result = await mediator.Send(new EnrichProspectCommand(id, request), ct);
             return result.Match(

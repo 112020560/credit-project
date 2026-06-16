@@ -21,6 +21,7 @@ public class CreditApplicationsRepository : ICreditApplicationsRepository
     public async Task<CreditApplication?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         return await _context.CreditApplications
+            .AsTracking()
             .Include(a => a.Documents)
             .FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
     }
@@ -35,7 +36,8 @@ public class CreditApplicationsRepository : ICreditApplicationsRepository
 
     public Task UpdateAsync(CreditApplication application, CancellationToken cancellationToken = default)
     {
-        _context.CreditApplications.Update(application);
+        // Entity is loaded with AsTracking(). DetectChanges() inside SaveChangesAsync
+        // handles scalar property changes (Modified) and new collection items (Added).
         return Task.CompletedTask;
     }
 }

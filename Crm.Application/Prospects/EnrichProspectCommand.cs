@@ -27,19 +27,19 @@ internal sealed class EnrichProspectCommandHandler(IUnitOfWork unitOfWork)
         foreach (var contact in dto.Contacts ?? [])
         {
             if (contact.Type == "Phone")
-                prospect.Phones.Add(new ProspectPhone { Id = Guid.CreateVersion7(), Type = contact.Type, Number = contact.Value, IsPrimary = contact.IsPrimary, Verified = false, CreatedAt = now });
+                prospect.Phones.Add(new ProspectPhone { Type = contact.Type, Number = contact.Value, IsPrimary = contact.IsPrimary, Verified = false, CreatedAt = now });
             else if (contact.Type == "Email")
-                prospect.Emails.Add(new ProspectEmail { Id = Guid.CreateVersion7(), Email = contact.Value, IsPrimary = contact.IsPrimary, Verified = false, CreatedAt = now });
+                prospect.Emails.Add(new ProspectEmail { Email = contact.Value, IsPrimary = contact.IsPrimary, Verified = false, CreatedAt = now });
         }
 
         foreach (var address in dto.Addresses ?? [])
-            prospect.Addresses.Add(new ProspectAddress { Id = Guid.CreateVersion7(), Type = address.Type, Street = address.Street, City = address.City, State = address.State, Country = address.Country, PostalCode = address.PostalCode, IsPrimary = address.IsPrimary, CreatedAt = now, UpdatedAt = now });
+            prospect.Addresses.Add(new ProspectAddress { Type = address.Type, Street = address.Street, City = address.City, State = address.State, Country = address.Country, PostalCode = address.PostalCode, IsPrimary = address.IsPrimary, CreatedAt = now, UpdatedAt = now });
 
         foreach (var work in dto.WorkInfos ?? [])
-            prospect.WorkInfos.Add(new ProspectWorkInfo { Id = Guid.CreateVersion7(), Occupation = work.Occupation, EmployerName = work.EmployerName, Salary = work.Salary, CreatedAt = now, UpdatedAt = now });
+            prospect.WorkInfos.Add(new ProspectWorkInfo { Occupation = work.Occupation, EmployerName = work.EmployerName, Salary = work.Salary, CreatedAt = now, UpdatedAt = now });
 
         foreach (var fiscal in dto.FiscalInfos ?? [])
-            prospect.FiscalInfos.Add(new ProspectFiscalInfo { Id = Guid.CreateVersion7(), TaxId = fiscal.TaxId, TaxRegime = fiscal.TaxRegime, EconomicActivity = fiscal.EconomicActivity, Industry = fiscal.Industry, CreatedAt = now, UpdatedAt = now });
+            prospect.FiscalInfos.Add(new ProspectFiscalInfo { TaxId = fiscal.TaxId, TaxRegime = fiscal.TaxRegime, EconomicActivity = fiscal.EconomicActivity, Industry = fiscal.Industry, CreatedAt = now, UpdatedAt = now });
 
         prospect.UpdatedAt = now;
         await unitOfWork.ProspectsRepository.UpdateAsync(prospect, cancellationToken);

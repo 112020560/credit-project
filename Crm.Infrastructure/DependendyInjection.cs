@@ -8,6 +8,7 @@ using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 
 namespace Crm.Infrastructure;
 
@@ -27,8 +28,13 @@ public static class DependencyInjection
     {
         var connectionString = configuration.GetConnectionString("DefaultConnection") ??
                                throw new Exception("No fue posible cargar el string de conexion");
+
+        var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
+        dataSourceBuilder.EnableDynamicJson();
+        var dataSource = dataSourceBuilder.Build();
+
         services.AddDbContext<CrmDbContext>(options =>
-            options.UseNpgsql(connectionString)
+            options.UseNpgsql(dataSource)
                 .LogTo(Console.WriteLine, Microsoft.Extensions.Logging.LogLevel.Debug)
                 .EnableSensitiveDataLogging()
                 .EnableDetailedErrors()

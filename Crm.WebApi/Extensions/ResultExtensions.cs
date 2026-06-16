@@ -8,16 +8,16 @@ public static class ResultExtensions
     public static TOut Match<TOut>(
         this Result result,
         Func<TOut> onSuccess,
-        Func<Result, TOut> onFailure)
+        Func<Error, TOut> onFailure)
     {
-        return result.IsSuccess ? onSuccess() : onFailure(result);
+        return result.IsSuccess ? onSuccess() : onFailure(result.Error);
     }
 
     public static TOut Match<TIn, TOut>(
         this Result<TIn> result,
         Func<TIn, TOut> onSuccess,
-        Func<Result<TIn>, TOut> onFailure)
+        Func<Error, TOut> onFailure)
     {
-        return result.IsSuccess ? onSuccess(result.Value) : onFailure(result);
+        return result.IsSuccess ? onSuccess(result.Value) : onFailure(result.Error);
     }
 }

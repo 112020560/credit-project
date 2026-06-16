@@ -1,6 +1,8 @@
+using SharedKernel.Contracts.Crm.CreditApplications;
+
 namespace Crm.Application.RiskEngine.Dtos;
 
-public class RiskEvaluationCompletedContract
+public class RiskEvaluationCompletedContract : RiskEvaluationCompleted
 {
     public Guid RiskEvaluationId { get; set; }
     public Guid CreditApplicationId { get; set; }

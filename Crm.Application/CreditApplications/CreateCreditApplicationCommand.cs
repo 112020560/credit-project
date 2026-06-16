@@ -6,6 +6,7 @@ using Crm.Domain.CreditApplications;
 using Crm.Domain.Prospects;
 using FluentValidation;
 using SharedKernel;
+using SharedKernel.Contracts.Crm.CreditApplications;
 
 namespace Crm.Application.CreditApplications;
 
@@ -37,7 +38,7 @@ internal sealed class CreateCreditApplicationCommandHandler(
         await unitOfWork.CreditApplicationsRepository.AddAsync(application, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        await mqProducerService.PublishEvent(new { ApplicationId = application.Id, application.ProspectId, application.Status }, Guid.NewGuid().ToString("N"), cancellationToken);
+        await mqProducerService.PublishEvent(new CreditApplicationCreatedContract { ApplicationId = application.Id, ProspectId = application.ProspectId, Status = application.Status.ToString() }, Guid.NewGuid().ToString("N"), cancellationToken);
 
         return ToDto(application);
     }

@@ -37,22 +37,22 @@ internal sealed class TriggerRiskEvaluationCommandHandler(
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         var traceId = Guid.NewGuid().ToString("N");
-        await mqProducerService.PublishEvent(new
+        await mqProducerService.PublishEvent(new RiskEvaluationStartedContract
         {
-            evaluation.Id,
-            evaluation.CreditApplicationId,
-            evaluation.RiskMatrixId,
-            evaluation.RiskMatrixVersion,
+            RiskEvaluationId = evaluation.Id,
+            CreditApplicationId = evaluation.CreditApplicationId,
+            RiskMatrixId = evaluation.RiskMatrixId,
+            RiskMatrixVersion = evaluation.RiskMatrixVersion,
             StartedAt = evaluation.EvaluatedAt
         }, traceId, cancellationToken);
-        await mqProducerService.PublishEvent(new
+        await mqProducerService.PublishEvent(new RiskEvaluationCompletedContract
         {
-            evaluation.Id,
-            evaluation.CreditApplicationId,
-            evaluation.RiskMatrixId,
-            evaluation.RiskMatrixVersion,
-            evaluation.TotalScore,
-            evaluation.Outcome,
+            RiskEvaluationId = evaluation.Id,
+            CreditApplicationId = evaluation.CreditApplicationId,
+            RiskMatrixId = evaluation.RiskMatrixId,
+            RiskMatrixVersion = evaluation.RiskMatrixVersion,
+            TotalScore = evaluation.TotalScore,
+            Outcome = evaluation.Outcome.ToString(),
             CompletedAt = evaluation.EvaluatedAt
         }, traceId, cancellationToken);
 

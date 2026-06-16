@@ -23,7 +23,6 @@ internal sealed class RegisterApplicationDocumentCommandHandler(IUnitOfWork unit
 
         var doc = new ApplicationDocument
         {
-            Id = Guid.CreateVersion7(),
             CreditApplicationId = application.Id,
             Type = request.Dto.Type,
             StorageUrl = request.Dto.StorageUrl,

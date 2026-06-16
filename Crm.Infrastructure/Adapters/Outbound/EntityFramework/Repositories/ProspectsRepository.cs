@@ -21,6 +21,7 @@ public class ProspectsRepository : IProspectsRepository
     public async Task<Prospect?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         return await _context.Prospects
+            .AsTracking()
             .Include(p => p.Addresses)
             .Include(p => p.Phones)
             .Include(p => p.Emails)
@@ -38,7 +39,8 @@ public class ProspectsRepository : IProspectsRepository
 
     public Task UpdateAsync(Prospect prospect, CancellationToken cancellationToken = default)
     {
-        _context.Prospects.Update(prospect);
+        // Entity is loaded with AsTracking(). DetectChanges() inside SaveChangesAsync
+        // handles scalar property changes (Modified) and new collection items (Added).
         return Task.CompletedTask;
     }
 }

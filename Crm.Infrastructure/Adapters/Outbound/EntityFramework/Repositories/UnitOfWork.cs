@@ -1,6 +1,7 @@
 using System;
 using Crm.Domain.Abstractions.Persistence;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Logging;
 
 namespace Crm.Infrastructure.Adapters.Outbound.EntityFramework.Repositories;
 
@@ -8,6 +9,7 @@ namespace Crm.Infrastructure.Adapters.Outbound.EntityFramework.Repositories;
 public class UnitOfWork : IUnitOfWork
 {
     private readonly CrmDbContext _dbContext;
+    private readonly ILogger<UnitOfWork> _logger;
     public ICustomersRepository _customersRepository;
     private IProspectsRepository _prospectsRepository;
     private ICreditApplicationsRepository _creditApplicationsRepository;
@@ -19,9 +21,10 @@ public class UnitOfWork : IUnitOfWork
     private IWorkflowDefinitionsRepository _workflowDefinitionsRepository;
     private IApprovalDecisionsRepository _approvalDecisionsRepository;
     private IDbContextTransaction _transaction;
-    public UnitOfWork(CrmDbContext dbContext)
+    public UnitOfWork(CrmDbContext dbContext, ILogger<UnitOfWork> logger)
     {
         _dbContext = dbContext;
+        _logger = logger;
     }
 
     public ICustomersRepository CustomersRepository => _customersRepository ??= new CustomersRepository(_dbContext);
@@ -58,6 +61,20 @@ public class UnitOfWork : IUnitOfWork
 
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
+#if DEBUG
+        LogEntityStates();
+#endif
         return await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+    
+    private void LogEntityStates()
+    {
+        foreach (var entry in _dbContext.ChangeTracker.Entries())
+        {
+            _logger.LogInformation(
+                "{Entity} => {State}",
+                entry.Entity.GetType().Name,
+                entry.State);
+        }
     }
 }

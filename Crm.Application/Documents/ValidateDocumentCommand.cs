@@ -27,7 +27,6 @@ internal sealed class ValidateDocumentCommandHandler(IUnitOfWork unitOfWork, IMq
 
         var validation = new DocumentValidation
         {
-            Id = Guid.CreateVersion7(),
             DocumentId = document.Id,
             Decision = request.Dto.Decision,
             RejectionReason = request.Dto.RejectionReason,

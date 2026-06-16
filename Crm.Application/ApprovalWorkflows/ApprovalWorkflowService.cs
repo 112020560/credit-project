@@ -2,6 +2,7 @@ using Crm.Application.Abstractions.Mq;
 using Crm.Application.ApprovalWorkflows.Dtos;
 using Crm.Application.CreditApplications;
 using Crm.Application.Customers.Dtos;
+using Crm.Application.Prospects.Dtos;
 using Crm.Domain.Abstractions.Persistence;
 using Crm.Domain.ApprovalWorkflows;
 using Crm.Domain.CreditApplications;
@@ -102,7 +103,7 @@ public class ApprovalWorkflowService(IUnitOfWork unitOfWork, IMqProducerService 
             await mqProducerService.PublishEvent(
                 new ApplicationApprovedContract(application.Id, application.ProspectId, workflow?.Id, approvalDecision.DecidedAt),
                 traceId, cancellationToken);
-            await mqProducerService.PublishEvent(new { ProspectId = prospect.Id, CustomerId = customer.Id }, traceId, cancellationToken);
+            await mqProducerService.PublishEvent(new ProspectConvertedContract { ProspectId = prospect.Id, CustomerId = customer.Id }, traceId, cancellationToken);
 
             var contract = new CreateCustomerContract
             {

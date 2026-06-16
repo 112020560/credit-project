@@ -21,13 +21,15 @@ public class DocumentsRepository : IDocumentsRepository
     public async Task<Document?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         return await _context.Documents
+            .AsTracking()
             .Include(d => d.Validations)
             .FirstOrDefaultAsync(d => d.Id == id, cancellationToken);
     }
 
     public Task UpdateAsync(Document document, CancellationToken cancellationToken = default)
     {
-        _context.Documents.Update(document);
+        // Entity is loaded with AsTracking(). DetectChanges() inside SaveChangesAsync
+        // handles scalar property changes (Modified) and new collection items (Added).
         return Task.CompletedTask;
     }
 }
