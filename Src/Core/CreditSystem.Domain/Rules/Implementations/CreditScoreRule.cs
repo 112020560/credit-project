@@ -1,3 +1,6 @@
+using CreditSystem.Domain.Enums;
+using CreditSystem.Domain.Models;
+
 namespace CreditSystem.Domain.Rules.Implementations;
 
 public class CreditScoreRule : IContractRule, IHardStopRule
@@ -6,21 +9,33 @@ public class CreditScoreRule : IContractRule, IHardStopRule
     public int Priority => 1;
 
     private const int MinimumScore = 500;
+    private readonly UnderwritingPolicy _policy;
+
+    public CreditScoreRule(UnderwritingPolicy policy)
+    {
+        _policy = policy;
+    }
 
     public Task<RuleEvaluationResult> EvaluateAsync(
-        ContractEvaluationContext context, 
+        ContractEvaluationContext context,
         CancellationToken ct = default)
     {
         var score = context.CreditScore;
 
-        // Si no hay score, pasar la regla (se evaluará con otros criterios)
         if (!score.HasValue)
         {
-            return Task.FromResult(RuleEvaluationResult.Pass(
-                RuleName,
-                "Credit score not available, skipping rule",
-                new Dictionary<string, object> { ["Skipped"] = true }
-            ));
+            return _policy.NoScoreBehavior == NoScoreBehavior.Reject
+                ? Task.FromResult(RuleEvaluationResult.Fail(
+                    RuleName,
+                    "Credit score required — policy rejects applications without score"))
+                : Task.FromResult(RuleEvaluationResult.Pass(
+                    RuleName,
+                    "Credit score not available, approved with penalty rate",
+                    new Dictionary<string, object>
+                    {
+                        ["Skipped"] = true,
+                        ["RateAdjustment"] = 5.0m
+                    }));
         }
 
         if (score.Value < MinimumScore)
@@ -31,7 +46,6 @@ public class CreditScoreRule : IContractRule, IHardStopRule
             ));
         }
 
-        // Calcular ajuste de tasa basado en score
         var rateAdjustment = score.Value switch
         {
             >= 750 => 0.0m,    // Excelente - tasa base

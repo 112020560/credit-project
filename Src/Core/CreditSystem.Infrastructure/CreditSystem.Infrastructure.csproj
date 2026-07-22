@@ -7,7 +7,6 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\..\shared\SharedKernel\SharedKernel.csproj" />
       <ProjectReference Include="..\CreditSystem.Application\CreditSystem.Application.csproj" />
       <ProjectReference Include="..\CreditSystem.Domain\CreditSystem.Domain.csproj" />
     </ItemGroup>
@@ -23,6 +22,7 @@
       <PackageReference Include="Microsoft.Extensions.Options" Version="9.0.11" />
       <PackageReference Include="Npgsql" Version="9.0.3" />
       <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.0" />
+      <PackageReference Include="SharedKernel" Version="1.0.0" />
     </ItemGroup>
 
 </Project>

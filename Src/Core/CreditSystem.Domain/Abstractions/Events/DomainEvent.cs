@@ -1,4 +1,4 @@
-namespace CreditSystem.Domain.Aggregates.LoanContract.Events.Base;
+namespace CreditSystem.Domain.Abstractions.Events;
 
 public abstract record DomainEvent : IDomainEvent
 {

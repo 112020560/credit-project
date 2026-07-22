@@ -1,6 +1,7 @@
-using CreditSystem.Domain.Abstractions.Services;
+
 using CreditSystem.Domain.Aggregates.LoanContract.Events;
-using CreditSystem.Domain.Aggregates.LoanContract.Events.Base;
+using CreditSystem.Domain.Abstractions.Events;
+using CreditSystem.Domain.Abstractions.Repositories;
 using CreditSystem.Domain.Models.ReadModels;
 using CreditSystem.Infrastructure.Projections;
 using Microsoft.Extensions.Logging;
@@ -11,14 +12,14 @@ namespace CreditSystem.Infrastructure.Projectors;
 public class LoanSummaryProjector : IProjection
 {
     private readonly IProjectionStore _store;
-    private readonly ICustomerService _customerService;
+    private readonly ICustomerReadRepository _customerService;
     private readonly ILogger<LoanSummaryProjector> _logger;
 
     public string ProjectionName => "LoanSummary";
 
     public LoanSummaryProjector(
         IProjectionStore store,
-        ICustomerService customerService,
+        ICustomerReadRepository customerService,
         ILogger<LoanSummaryProjector> logger)
     {
         _store = store;

@@ -76,7 +76,7 @@ public class RevolvingInterestAccrualJob : IRevolvingInterestAccrualJob
             ?? aggregate.State.ActivatedAt?.Date
             ?? periodEnd.AddDays(-1);
 
-        // Asegurar al menos 1 día de diferencia
+        // Ensure at least 1 day between period start and end
         if (periodStart >= periodEnd)
         {
             periodStart = periodEnd.AddDays(-1);

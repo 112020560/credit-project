@@ -29,7 +29,6 @@ public class InterestAccrualJob : IInterestAccrualJob
     {
         _logger.LogInformation("Starting interest accrual job at {Time}", DateTime.UtcNow);
 
-        // 1. Obtener préstamos activos
         var activeLoans = await _queryService.GetActiveLoansForAccrualAsync(cancellationToken);
 
         _logger.LogInformation("Found {Count} active loans for interest accrual", activeLoans.Count);
@@ -58,7 +57,6 @@ public class InterestAccrualJob : IInterestAccrualJob
 
     private async Task AccrueInterestForLoanAsync(Guid loanId, CancellationToken cancellationToken)
     {
-        // 1. Cargar aggregate
         var aggregate = await _repository.GetByIdAsync(loanId, cancellationToken);
 
         if (aggregate == null)
@@ -67,18 +65,16 @@ public class InterestAccrualJob : IInterestAccrualJob
             return;
         }
 
-        // 2. Calcular período
         var periodEnd = DateTime.UtcNow.Date;
         var periodStart = aggregate.State.LastInterestAccrualDate?.Date ?? aggregate.State.DisbursedAt?.Date ?? periodEnd.AddDays(-1);
 
-        // No acumular si ya se calculó hoy
+        // Skip if already accrued today
         if (periodStart >= periodEnd)
         {
             _logger.LogDebug("Interest already accrued for loan {LoanId} today", loanId);
             return;
         }
 
-        // 3. Ejecutar acumulación
         try
         {
             aggregate.AccrueInterest(periodStart, periodEnd);

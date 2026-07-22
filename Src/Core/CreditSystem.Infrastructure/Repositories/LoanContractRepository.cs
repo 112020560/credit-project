@@ -1,7 +1,7 @@
 using CreditSystem.Domain.Abstractions;
 using CreditSystem.Domain.Abstractions.EventStore;
 using CreditSystem.Domain.Aggregates.LoanContract;
-using CreditSystem.Domain.Aggregates.LoanContract.Events.Base;
+using CreditSystem.Domain.Abstractions.Events;
 using CreditSystem.Infrastructure.EventStore;
 using Microsoft.Extensions.Logging;
 

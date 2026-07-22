@@ -5,6 +5,8 @@ using CreditSystem.Domain.Abstractions.Persistence;
 using CreditSystem.Domain.Abstractions.Projections;
 using CreditSystem.Domain.Abstractions.Repositories;
 using CreditSystem.Domain.Abstractions.Services;
+using CreditSystem.Domain.Models;
+
 using CreditSystem.Infrastructure.EventStore;
 using CreditSystem.Infrastructure.Messaging.Outbox;
 using CreditSystem.Infrastructure.Messaging.RabbitMq.Consumers;
@@ -105,10 +107,22 @@ public static class DependencyInjection
 
     private static IServiceCollection AddPersistenceService(this IServiceCollection services, IConfiguration configuration)
     {
+        var connectionString = configuration.GetConnectionString("CreditDb")!;
+
         services.AddScoped<ILoanQueryService>(sp =>
             new LoanQueryService(
-                configuration.GetConnectionString("CreditDb")!,
+                connectionString,
                 sp.GetRequiredService<IOptions<LateFeeConfiguration>>()));
+
+        services.AddSingleton<IUnderwritingPolicyRepository>(_ =>
+            new UnderwritingPolicyRepository(connectionString));
+
+        services.AddSingleton<UnderwritingPolicy>(sp =>
+            sp.GetRequiredService<IUnderwritingPolicyRepository>()
+              .GetActiveAsync()
+              .GetAwaiter()
+              .GetResult());
+
         return services;
     }
 
@@ -130,8 +144,9 @@ public static class DependencyInjection
 
     private static IServiceCollection AddConsumerConfiguration(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddScoped<ICustomerService>(sp =>
-            new CustomerService(configuration.GetConnectionString("CreditDb")!));
+        services.AddScoped<ICustomerReadRepository>(sp =>
+            new CustomerReadRepository(configuration.GetConnectionString("CreditDb")!));
+        services.AddScoped<ICustomerReferenceRepository, CustomerReferenceRepository>();
         
         services.AddMassTransit(x =>
         {

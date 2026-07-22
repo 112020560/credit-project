@@ -1,9 +1,5 @@
-namespace CreditSystem.Domain.Entities;
+namespace CreditSystem.Domain.Abstractions.Persistence;
 
-/// <summary>
-/// Represents a message to be published via the outbox pattern.
-/// Ensures at-least-once delivery semantics for message publishing.
-/// </summary>
 public class OutboxMessage
 {
     public Guid Id { get; set; }

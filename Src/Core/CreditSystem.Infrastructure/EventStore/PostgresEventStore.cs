@@ -1,5 +1,5 @@
 using CreditSystem.Domain.Abstractions.EventStore;
-using CreditSystem.Domain.Aggregates.LoanContract.Events.Base;
+using CreditSystem.Domain.Abstractions.Events;
 using CreditSystem.Infrastructure.EventStore.Models;
 using Microsoft.Extensions.Logging;
 using Npgsql;

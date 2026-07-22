@@ -12,7 +12,7 @@ public class FlatAmortizationCalculator : IAmortizationCalculator
     {
         var entries = new List<AmortizationEntry>();
         
-        // Interés flat: se calcula sobre el capital inicial, no sobre saldo
+        // Flat interest: calculated on original principal, not on outstanding balance
         var totalInterest = new Money(principal.Amount * (rate.AnnualRate / 100) * (termMonths / 12m), principal.Currency);
         var monthlyInterest = new Money(totalInterest.Amount / termMonths, principal.Currency);
         var monthlyPrincipal = new Money(principal.Amount / termMonths, principal.Currency);
@@ -23,7 +23,7 @@ public class FlatAmortizationCalculator : IAmortizationCalculator
         {
             var principalPaid = monthlyPrincipal;
 
-            // Ajustar último pago
+            // Adjust final payment for rounding residual
             if (i == termMonths)
             {
                 principalPaid = balance;

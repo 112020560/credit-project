@@ -1,6 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using CreditSystem.Domain.Aggregates.LoanContract.Events.Base;
+using CreditSystem.Domain.Abstractions.Events;
 using CreditSystem.Domain.ValueObjects;
 using CreditSystem.Infrastructure.EventStore.Models;
 

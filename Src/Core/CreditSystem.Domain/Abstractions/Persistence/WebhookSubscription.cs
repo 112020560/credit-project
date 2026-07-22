@@ -1,8 +1,5 @@
-namespace CreditSystem.Domain.Entities;
+namespace CreditSystem.Domain.Abstractions.Persistence;
 
-/// <summary>
-/// Represents a webhook subscription for a customer to receive event notifications.
-/// </summary>
 public class WebhookSubscription
 {
     public Guid Id { get; set; }
@@ -15,9 +12,6 @@ public class WebhookSubscription
     public DateTimeOffset UpdatedAt { get; set; }
 }
 
-/// <summary>
-/// Represents a webhook delivery attempt.
-/// </summary>
 public class WebhookDelivery
 {
     public Guid Id { get; set; }
@@ -41,9 +35,6 @@ public enum WebhookDeliveryStatus
     Failed
 }
 
-/// <summary>
-/// Supported webhook event types.
-/// </summary>
 public static class WebhookEventTypes
 {
     public const string PaymentCompleted = "payment.completed";

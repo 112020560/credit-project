@@ -1,4 +1,4 @@
-using CreditSystem.Domain.Entities;
+using CreditSystem.Domain.Abstractions.Persistence;
 using FluentValidation;
 
 namespace CreditSystem.Application.Commands.SubscribeWebhook;

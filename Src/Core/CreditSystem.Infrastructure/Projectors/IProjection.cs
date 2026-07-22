@@ -1,4 +1,4 @@
-using CreditSystem.Domain.Aggregates.LoanContract.Events.Base;
+using CreditSystem.Domain.Abstractions.Events;
 
 namespace CreditSystem.Infrastructure.Projectors;
 

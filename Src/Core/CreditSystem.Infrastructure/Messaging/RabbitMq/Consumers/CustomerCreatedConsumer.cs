@@ -1,61 +1,48 @@
-using Dapper;
+using CreditSystem.Application.Commands.SyncCustomerFromCrm;
 using MassTransit;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
-using Npgsql;
+using MediatR;
 using SharedKernel.Contracts.Crm.Customers;
 
 namespace CreditSystem.Infrastructure.Messaging.RabbitMq.Consumers;
 
-public class CustomerCreatedConsumer: IConsumer<CustomerCreated>
+public class CustomerCreatedConsumer : IConsumer<CustomerCreated>
 {
-    private readonly string _connectionString;
-    private readonly ILogger<CustomerCreatedConsumer> _logger;
+    private readonly IMediator _mediator;
 
-    public CustomerCreatedConsumer(IConfiguration configuration, ILogger<CustomerCreatedConsumer> logger)
+    public CustomerCreatedConsumer(IMediator mediator)
     {
-        _connectionString = configuration.GetConnectionString("CreditDb")!;
-        _logger = logger;
+        _mediator = mediator;
     }
-    
+
     public async Task Consume(ConsumeContext<CustomerCreated> context)
     {
         var message = context.Message;
 
-        await CreateCustomerReferenceAsync(message);
+        var command = new SyncCustomerFromCrmCommand
+        {
+            ExternalId = message.CustomerId,
+            FullName = message.FullName,
+            Email = message.Email,
+            Phone = message.Phone,
+            DocumentType = message.IdentificationType,
+            DocumentNumber = message.IdentificationNumber,
+            CreditScore = ExtractInt(message.Metadata, "CreditScore"),
+            MonthlyIncome = ExtractDecimal(message.Metadata, "MonthlyIncome"),
+            MonthlyDebt = ExtractDecimal(message.Metadata, "MonthlyDebt")
+        };
+
+        await _mediator.Send(command, context.CancellationToken);
     }
 
-    public async Task CreateCustomerReferenceAsync(CustomerCreated message)
+    private static int? ExtractInt(IDictionary<string, object>? dict, string key)
     {
-        const string sql = @"
-            INSERT INTO customer_references 
-                (id, external_id, full_name, email, phone, document_type, document_number, created_at, updated_at)
-            VALUES 
-                (@Id, @ExternalId, @FullName, @Email, @Phone, @DocumentType, @DocumentNumber, @CreatedAt, @UpdatedAt)
-            ON CONFLICT (external_id) DO UPDATE SET
-                full_name = @FullName,
-                email = @Email,
-                phone = @Phone,
-                document_type = @DocumentType,
-                document_number = @DocumentNumber,
-                updated_at = @UpdatedAt";
+        if (dict == null || !dict.TryGetValue(key, out var value)) return null;
+        return value is null ? null : Convert.ToInt32(value);
+    }
 
-        await using var connection = new NpgsqlConnection(_connectionString);
-        await connection.ExecuteAsync(sql, new
-        {
-            Id = Guid.NewGuid(),
-            ExternalId = message.CustomerId,
-            FullName=message.FullName,
-            Email=message.Email,
-            Phone=message.Phone,
-            DocumentType=message.IdentificationType,
-            DocumentNumber=message.IdentificationNumber,
-            CreatedAt=message.CreatedAt,
-            UpdatedAt = DateTime.UtcNow
-        });
-
-        _logger.LogInformation(
-            "Customer reference created/updated for external ID {ExternalId}", 
-            message.CustomerId);
+    private static decimal? ExtractDecimal(IDictionary<string, object>? dict, string key)
+    {
+        if (dict == null || !dict.TryGetValue(key, out var value)) return null;
+        return value is null ? null : Convert.ToDecimal(value);
     }
 }

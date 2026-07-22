@@ -1,5 +1,3 @@
-using CreditSystem.Domain.Entities;
-
 namespace CreditSystem.Domain.Abstractions.Persistence;
 
 /// <summary>

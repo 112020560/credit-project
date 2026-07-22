@@ -13,7 +13,7 @@ public static class PaymentsEndpoints
 {
     public static void MapPaymentsEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/payments")
+        var group = app.MapGroup("/payments")
             .WithTags("Async Payments")
             .WithOpenApi();
 
@@ -43,7 +43,7 @@ public static class PaymentsEndpoints
 
     public static void MapWebhooksEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/webhooks")
+        var group = app.MapGroup("/webhooks")
             .WithTags("Webhooks")
             .WithOpenApi();
 

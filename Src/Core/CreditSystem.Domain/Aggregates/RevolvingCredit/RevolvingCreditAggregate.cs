@@ -1,4 +1,4 @@
-using CreditSystem.Domain.Aggregates.LoanContract.Events.Base;
+using CreditSystem.Domain.Abstractions.Events;
 using CreditSystem.Domain.Aggregates.RevolvingCredit.Events;
 using CreditSystem.Domain.Enums;
 using CreditSystem.Domain.Exceptions;
@@ -14,7 +14,7 @@ public class RevolvingCreditAggregate
     public RevolvingCreditState State { get; private set; } = null!;
     public IReadOnlyList<IDomainEvent> UncommittedEvents => _uncommittedEvents.AsReadOnly();
 
-    public RevolvingCreditAggregate()
+    private RevolvingCreditAggregate()
     {
         State = RevolvingCreditState.Initial;
     }
@@ -128,7 +128,6 @@ public class RevolvingCreditAggregate
             remaining = new Money(remaining.Amount - feesPaid.Amount, remaining.Currency);
         }
 
-        // 2. Pagar interés
         if (State.AccruedInterest.Amount > 0 && remaining.Amount > 0)
         {
             interestPaid = remaining.Amount >= State.AccruedInterest.Amount
@@ -161,7 +160,7 @@ public class RevolvingCreditAggregate
             Method = method
         }, isNew: true);
 
-        // Descongelar si estaba congelado y pagó el mínimo
+        // Auto-unfreeze if frozen and minimum payment was received
         if (State.Status == RevolvingCreditStatus.Frozen && 
             State.CurrentMinimumPayment != null &&
             amount.Amount >= State.CurrentMinimumPayment.Amount)
@@ -207,7 +206,6 @@ public class RevolvingCreditAggregate
         var statementDate = DateTime.UtcNow.Date;
         var dueDate = statementDate.AddDays(State.GracePeriodDays);
 
-        // Calcular pago mínimo
         var percentagePayment = new Money(
             State.CurrentBalance.Amount * State.MinimumPaymentPercentage / 100,
             State.CurrentBalance.Currency);
@@ -216,13 +214,12 @@ public class RevolvingCreditAggregate
             ? percentagePayment
             : State.MinimumPaymentAmount;
 
-        // Si el balance es menor al mínimo, el mínimo es el balance total
+        // Cap minimum payment at total owed
         if (State.TotalOwed.Amount < minimumPayment.Amount)
         {
             minimumPayment = State.TotalOwed;
         }
 
-        // Si no hay deuda, el mínimo es 0
         if (State.TotalOwed.Amount <= 0)
         {
             minimumPayment = Money.Zero(State.CreditLimit.Currency);

@@ -73,9 +73,10 @@ public class LoanContractAggregateTests
         // Act
         var contract = CreateValidContract();
 
-        // Assert
-        contract.UncommittedEvents.Should().HaveCount(1);
+        // Assert: Create emits ContractCreated + ContractApproved
+        contract.UncommittedEvents.Should().HaveCount(2);
         contract.UncommittedEvents.First().Should().BeOfType<ContractCreated>();
+        contract.UncommittedEvents.Skip(1).First().Should().BeOfType<ContractApproved>();
     }
 
     [Fact]
@@ -116,8 +117,8 @@ public class LoanContractAggregateTests
         // Act
         contract.Disburse("ACH", "0987654321");
 
-        // Assert
-        contract.UncommittedEvents.Should().HaveCount(2);
+        // Assert: Create (2 events) + Disburse (1 event) = 3 total
+        contract.UncommittedEvents.Should().HaveCount(3);
         contract.UncommittedEvents.Last().Should().BeOfType<LoanDisbursed>();
     }
 
@@ -473,7 +474,7 @@ public class LoanContractAggregateTests
         var events = originalContract.UncommittedEvents.ToList();
 
         // Act
-        var rehydratedContract = new LoanContractAggregate(events);
+        var rehydratedContract = new LoanContractAggregate(null, events);
 
         // Assert
         rehydratedContract.Id.Should().Be(originalContract.Id);

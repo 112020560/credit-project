@@ -12,7 +12,7 @@ public static class AdminEndpoints
 {
     public static void MapAdminEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/admin")
+        var group = app.MapGroup("/admin")
             .WithTags("Admin")
             .WithOpenApi();
 

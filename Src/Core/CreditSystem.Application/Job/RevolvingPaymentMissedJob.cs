@@ -73,7 +73,7 @@ public class RevolvingPaymentMissedJob : IRevolvingPaymentMissedJob
             return;
         }
 
-        // Si ya está cerrado o congelado por esta razón, no procesar
+        // Skip closed credit lines
         if (aggregate.State.Status == RevolvingCreditStatus.Closed)
         {
             return;
@@ -81,16 +81,14 @@ public class RevolvingPaymentMissedJob : IRevolvingPaymentMissedJob
 
         var daysOverdue = (int)(DateTime.UtcNow.Date - statement.DueDate.Date).TotalDays;
 
-        // Calcular late fee
         var lateFee = CalculateLateFee(statement.MinimumPayment, daysOverdue);
 
-        // Aplicar late fee si hay
         if (lateFee > 0)
         {
             await ApplyLateFeeAsync(aggregate, lateFee, cancellationToken);
         }
 
-        // Congelar si está muy atrasado
+        // Freeze if significantly overdue
         if (daysOverdue >= _config.DaysToFreeze && aggregate.State.Status == RevolvingCreditStatus.Active)
         {
             try
@@ -128,19 +126,19 @@ public class RevolvingPaymentMissedJob : IRevolvingPaymentMissedJob
 
     private decimal CalculateLateFee(decimal minimumPayment, int daysOverdue)
     {
-        // Porcentaje del pago mínimo
+        // Option 1: percentage of minimum payment
         var percentageFee = minimumPayment * (_config.PercentageOfMinimum / 100);
 
-        // Cargo fijo
+        // Option 2: fixed amount
         var fixedFee = _config.FixedAmount;
 
-        // Cargo por día
+        // Option 3: daily charge
         var dailyFee = daysOverdue * _config.DailyAmount;
 
-        // Usar el mayor entre porcentaje y fijo, más el diario
+        // Use the greater of percentage or fixed, plus the daily charge
         var totalFee = Math.Max(percentageFee, fixedFee) + dailyFee;
 
-        // Aplicar tope máximo
+        // Apply maximum cap
         return Math.Min(totalFee, _config.MaximumFee);
     }
 }

@@ -1,5 +1,6 @@
-using CreditSystem.Domain.Abstractions.Services;
-using CreditSystem.Domain.Aggregates.LoanContract.Events.Base;
+
+using CreditSystem.Domain.Abstractions.Events;
+using CreditSystem.Domain.Abstractions.Repositories;
 using CreditSystem.Domain.Aggregates.RevolvingCredit.Events;
 using CreditSystem.Domain.Enums;
 using CreditSystem.Domain.Models.ReadModels;
@@ -11,14 +12,14 @@ namespace CreditSystem.Infrastructure.Projectors;
 public class RevolvingCreditSummaryProjector : IProjection
 {
     private readonly IProjectionStore _store;
-    private readonly ICustomerService _customerService;
+    private readonly ICustomerReadRepository _customerService;
     private readonly ILogger<RevolvingCreditSummaryProjector> _logger;
     
     public string ProjectionName => "RevolvingCreditSummary";
 
     public RevolvingCreditSummaryProjector(
         IProjectionStore store,
-        ICustomerService customerService,
+        ICustomerReadRepository customerService,
         ILogger<RevolvingCreditSummaryProjector> logger)
     {
         _store = store;

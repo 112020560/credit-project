@@ -1,6 +1,6 @@
 using System.Text;
 using CreditSystem.Domain.Abstractions.Persistence;
-using CreditSystem.Domain.Entities;
+using CreditSystem.Domain.Abstractions.Persistence;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;

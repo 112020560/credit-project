@@ -1,5 +1,5 @@
 using CreditSystem.Domain.Aggregates.LoanContract.Events;
-using CreditSystem.Domain.Aggregates.LoanContract.Events.Base;
+using CreditSystem.Domain.Abstractions.Events;
 using CreditSystem.Domain.Enums;
 using CreditSystem.Domain.Exceptions;
 using CreditSystem.Domain.Services.Amortization;
@@ -15,17 +15,7 @@ public class LoanContractAggregate
     public LoanContractState State { get; private set; }
     public IReadOnlyList<IDomainEvent> UncommittedEvents => _uncommittedEvents.AsReadOnly();
 
-    // Para rehidratar desde eventos
-    public LoanContractAggregate(IEnumerable<IDomainEvent> events): this(null, events)
-    {
-        State = LoanContractState.Initial;
-        foreach (var @event in events)
-        {
-            Apply(@event, isNew: false);
-        }
-    }
-
-    // Para crear nuevo
+    // Private constructor for factory method
     private LoanContractAggregate()
     {
         State = LoanContractState.Initial;
@@ -59,6 +49,15 @@ public class LoanContractAggregate
             TermMonths = termMonths,
             AmortizationMethod = amortizationMethod,
             Schedule = schedule,
+            EvaluationMetadata = evaluationMetadata
+        }, isNew: true);
+
+        aggregate.Apply(new ContractApproved
+        {
+            AggregateId = id,
+            CustomerId = customerId,
+            ApprovedRate = rate,
+            ApprovedPrincipal = principal,
             EvaluationMetadata = evaluationMetadata
         }, isNew: true);
 
@@ -110,27 +109,24 @@ public class LoanContractAggregate
         if (amount.Currency != State.Principal.Currency)
             throw new DomainException($"Currency mismatch: expected {State.Principal.Currency}, got {amount.Currency}");
 
-        // Aplicar en orden: fees -> interest -> principal
+        // Apply in order: fees -> interest -> principal
         var remainingAmount = amount;
         var feePaid = Money.Zero();
         var interestPaid = Money.Zero();
         var principalPaid = Money.Zero();
 
-        // 1. Pagar fees pendientes
         if (State.TotalFees.Amount > 0)
         {
             feePaid = remainingAmount > State.TotalFees ? State.TotalFees : remainingAmount;
             remainingAmount = remainingAmount - feePaid;
         }
 
-        // 2. Pagar interés acumulado
         if (remainingAmount.Amount > 0 && State.AccruedInterest.Amount > 0)
         {
             interestPaid = remainingAmount > State.AccruedInterest ? State.AccruedInterest : remainingAmount;
             remainingAmount = remainingAmount - interestPaid;
         }
 
-        // 3. Pagar principal
         if (remainingAmount.Amount > 0)
         {
             principalPaid = remainingAmount > State.CurrentBalance ? State.CurrentBalance : remainingAmount;
@@ -151,7 +147,6 @@ public class LoanContractAggregate
             Method = method
         }, isNew: true);
 
-        // Verificar si se pagó completamente
         if (newBalance.Amount == 0)
         {
             Apply(new ContractPaidOff
@@ -167,14 +162,13 @@ public class LoanContractAggregate
         }
     }
 
-    public void RecordMissedPayment(int paymentNumber, DateTime dueDate, Money lateFee)
+    public void RecordMissedPayment(int paymentNumber, DateTime dueDate, Money lateFee, int autoDefaultThresholdDays = 90)
     {
         EnsureStatus(ContractStatus.Active, ContractStatus.Delinquent);
         
         if (State.Status != ContractStatus.Active && State.Status != ContractStatus.Delinquent)
             throw new DomainException($"Cannot record missed payment: loan status is {State.Status}");
 
-        // Verificar que no se haya registrado ya este pago perdido
         if (paymentNumber <= State.PaymentsMissed + State.PaymentsMade)
             throw new DomainException($"Payment {paymentNumber} already processed");
 
@@ -195,8 +189,7 @@ public class LoanContractAggregate
             LateFeeApplied = lateFee
         }, isNew: true);
 
-        // Auto-default después de X días
-        if (daysOverdue >= 90)
+        if (daysOverdue >= autoDefaultThresholdDays)
         {
             MarkAsDefault($"Payment {daysOverdue} days overdue");
         }
@@ -296,6 +289,8 @@ public class LoanContractAggregate
                 Version = state.Version + 1
             },
 
+            ContractApproved => state,
+
             LoanDisbursed e => state with
             {
                 Status = ContractStatus.Active,
@@ -346,7 +341,7 @@ public class LoanContractAggregate
                 TermMonths = e.NewTermMonths,
                 Schedule = e.NewSchedule,
                 CurrentBalance = state.CurrentBalance - e.ForgiveAmount,
-                Status = ContractStatus.Active, // Vuelve a activo después de reestructurar
+                Status = ContractStatus.Active, // Reinstated to active after restructure
                 PaymentsMissed = 0, // Reset de pagos perdidos
                 NextPaymentDue = e.NewSchedule.Entries.FirstOrDefault()?.DueDate,
                 Version = state.Version + 1

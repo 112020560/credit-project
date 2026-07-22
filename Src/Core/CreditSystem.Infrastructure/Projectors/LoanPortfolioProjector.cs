@@ -1,5 +1,5 @@
 using CreditSystem.Domain.Aggregates.LoanContract.Events;
-using CreditSystem.Domain.Aggregates.LoanContract.Events.Base;
+using CreditSystem.Domain.Abstractions.Events;
 using CreditSystem.Infrastructure.Projections;
 
 namespace CreditSystem.Infrastructure.Projectors;

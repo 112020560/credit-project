@@ -27,7 +27,6 @@ public class DefaultContractCommandHandler : IRequestHandler<DefaultContractComm
         DefaultContractCommand request,
         CancellationToken cancellationToken)
     {
-        // 1. Cargar aggregate
         var aggregate = await _repository.GetByIdAsync(request.LoanId, cancellationToken);
 
         if (aggregate == null)
@@ -36,13 +35,11 @@ public class DefaultContractCommandHandler : IRequestHandler<DefaultContractComm
             return DefaultContractResponse.Failed($"Loan {request.LoanId} not found");
         }
 
-        // 2. Verificar si ya está en default
         if (aggregate.State.Status == ContractStatus.Default)
         {
             return DefaultContractResponse.Failed("Contract is already in default status");
         }
 
-        // 3. Ejecutar comando
         try
         {
             aggregate.MarkAsDefault(request.Reason);
@@ -55,13 +52,9 @@ public class DefaultContractCommandHandler : IRequestHandler<DefaultContractComm
             return DefaultContractResponse.Failed(ex.Message);
         }
 
-        // Guardar eventos ANTES de persistir
         var events = aggregate.UncommittedEvents.ToList();
 
-        // 4. Persistir (fuente de verdad)
         await _repository.SaveAsync(aggregate, cancellationToken);
-
-        // 5. Proyectar a Read Models
         try
         {
             await _projectionEngine.ProjectEventsAsync(events, cancellationToken);

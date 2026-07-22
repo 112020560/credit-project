@@ -35,7 +35,6 @@ public class DisburseLoanCommandHandler : IRequestHandler<DisburseLoanCommand, D
             return DisburseLoanResponse.Failed($"Loan {request.LoanId} not found");
         }
 
-        // 2. Ejecutar comando en el aggregate
         try
         {
             aggregate.Disburse(
@@ -50,10 +49,8 @@ public class DisburseLoanCommandHandler : IRequestHandler<DisburseLoanCommand, D
             return DisburseLoanResponse.Failed(ex.Message);
         }
 
-        // Guardar eventos ANTES de persistir
         var events = aggregate.UncommittedEvents.ToList();
 
-        // 3. Persistir eventos (fuente de verdad)
         await _repository.SaveAsync(aggregate, cancellationToken);
 
         // 4. Proyectar eventos a Read Models

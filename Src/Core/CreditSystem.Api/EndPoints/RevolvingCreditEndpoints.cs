@@ -12,6 +12,8 @@ using CreditSystem.Application.Commands.RevolvingCredit.UnfreezeCreditLine;
 using CreditSystem.Application.Queries.RevolvingCredit;
 using CreditSystem.Application.Queries.RevolvingCredit.GetRevolvingCreditSummary;
 using CreditSystem.Application.Queries.RevolvingCredit.GetRevolvingTransactions;
+
+using CreditSystem.Domain.Abstractions.Repositories;
 using CreditSystem.Domain.Abstractions.Services;
 using FluentValidation;
 using MediatR;
@@ -23,7 +25,7 @@ public static class RevolvingCreditEndpoints
 {
     public static void MapRevolvingCreditEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/revolving-credits")
+        var group = app.MapGroup("/revolving-credits")
             .WithTags("Revolving Credit")
             .WithOpenApi();
 
@@ -513,7 +515,7 @@ public static class RevolvingCreditEndpoints
 
     private static async Task<IResult> GetByCustomer(
         Guid customerId,
-        [FromServices] ICustomerService customerService,
+        [FromServices] ICustomerReadRepository customerService,
         [FromServices] IRevolvingCreditQueryService queryService,
         CancellationToken cancellationToken)
     {

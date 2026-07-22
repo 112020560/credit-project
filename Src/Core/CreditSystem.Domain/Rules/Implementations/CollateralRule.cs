@@ -5,14 +5,14 @@ public class CollateralRule : IContractRule
     public string RuleName => "CollateralEvaluation";
     public int Priority => 3;
 
-    private const decimal MinCollateralRatio = 1.2m; // Colateral debe ser 120% del préstamo
+    private const decimal MinCollateralRatio = 1.2m; // Collateral must be at least 120% of the loan amount
 
     public Task<RuleEvaluationResult> EvaluateAsync(
         ContractEvaluationContext context, 
         CancellationToken ct = default)
     {
-        // Si no hay colateral, no es requerido pero no da beneficio
-        if (!context.CollateralValue.HasValue || context.CollateralValue.Value <= 0)
+        // Collateral is optional but unsecured loans carry a rate penalty
+        if (context.CollateralValue == null || context.CollateralValue.Amount <= 0)
         {
             return Task.FromResult(RuleEvaluationResult.Pass(
                 RuleName,
@@ -20,12 +20,12 @@ public class CollateralRule : IContractRule
                 new Dictionary<string, object>
                 {
                     ["Secured"] = false,
-                    ["RateAdjustment"] = 1.0m // Penalización por no tener colateral
+                    ["RateAdjustment"] = 1.0m // Penalty for unsecured loan
                 }
             ));
         }
 
-        var collateralRatio = context.CollateralValue.Value / context.RequestedAmount;
+        var collateralRatio = context.CollateralValue!.Amount / context.RequestedAmount.Amount;
 
         if (collateralRatio < 1.0m)
         {

@@ -1,5 +1,5 @@
 using CreditSystem.Domain.Abstractions.Persistence;
-using CreditSystem.Domain.Entities;
+using CreditSystem.Domain.Abstractions.Persistence;
 using Dapper;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;

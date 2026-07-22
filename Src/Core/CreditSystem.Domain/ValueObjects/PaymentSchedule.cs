@@ -10,7 +10,7 @@ public record PaymentSchedule
     public Money TotalPayment { get; }
     public AmortizationMethod Method { get; init; }
 
-    // Constructor sin parámetros para deserialización
+    // Parameterless constructor for deserialization
     [JsonConstructor]
     public PaymentSchedule()
     {
@@ -54,7 +54,7 @@ public record PaymentSchedule
 
             balance = balance - principalPaid;
 
-            // Ajustar último pago
+            // Adjust final payment for rounding residual
             if (i == termMonths && balance.Amount != 0)
             {
                 principalPaid = principalPaid.Add(balance);
@@ -80,7 +80,7 @@ public record PaymentSchedule
         var n = months;
         var p = principal.Amount;
 
-        // Fórmula de amortización: P * [r(1+r)^n] / [(1+r)^n - 1]
+        // French amortization formula: P * [r(1+r)^n] / [(1+r)^n - 1]
         var powerPart = (decimal)Math.Pow((double)(1 + r), (double)n);
         var payment = p * (r * powerPart) / (powerPart - 1);
         

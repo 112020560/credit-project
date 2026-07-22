@@ -1,6 +1,9 @@
 using CreditSystem.Domain.Abstractions;
 using CreditSystem.Domain.Abstractions.Projections;
+using CreditSystem.Domain.Abstractions.Repositories;
 using CreditSystem.Domain.Abstractions.Services;
+using CreditSystem.Domain.ValueObjects;
+
 using CreditSystem.Domain.Aggregates.LoanContract;
 using CreditSystem.Domain.Rules;
 using CreditSystem.Domain.Services.Amortization;
@@ -13,7 +16,7 @@ namespace CreditSystem.Application.Commands.CreateContract;
 public class CreateContractCommandHandler : IRequestHandler<CreateContractCommand, CreateContractResponse>
 {
     private readonly ILoanContractRepository _repository;
-    private readonly ICustomerService _customerService;
+    private readonly ICustomerReadRepository _customerService;
     private readonly ILoanQueryService _queryService;
     private readonly ContractEngine _contractEngine;
     private readonly IAmortizationCalculatorFactory _calculatorFactory;
@@ -22,7 +25,7 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
 
     public CreateContractCommandHandler(
         ILoanContractRepository repository,
-        ICustomerService customerService,
+        ICustomerReadRepository customerService,
         ILoanQueryService queryService,
         ContractEngine contractEngine,
         IAmortizationCalculatorFactory calculatorFactory,
@@ -42,7 +45,6 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
         CreateContractCommand request, 
         CancellationToken cancellationToken)
     {
-        // 1. Buscar cliente por external ID (CRM)
         var customer = await _customerService.GetByExternalIdAsync(
             request.ExternalCustomerId, 
             cancellationToken);
@@ -57,23 +59,29 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
                 $"Customer with external ID {request.ExternalCustomerId} not found");
         }
         
-        // 2. Verificar si tiene préstamos activos
         var hasActiveLoans = await _queryService.HasActiveLoansAsync(customer.Id, cancellationToken);
 
         // 2. Evaluar reglas del motor de Smart Contract
         var evaluationContext = new ContractEvaluationContext
         {
             Customer = customer,
-            RequestedAmount = request.Amount,
+            RequestedAmount = new Money(request.Amount, request.Currency),
             TermMonths = request.TermMonths,
-            CollateralValue = request.CollateralValue,
+            CollateralValue = request.CollateralValue.HasValue ? new Money(request.CollateralValue.Value, request.Currency) : null,
             CreditScore = customer.CreditScore,
-            MonthlyIncome = customer.MonthlyIncome,
-            MonthlyDebt = customer.MonthlyDebt,
+            MonthlyIncome = customer.MonthlyIncome.HasValue ? new Money(customer.MonthlyIncome.Value, request.Currency) : null,
+            MonthlyDebt = customer.MonthlyDebt.HasValue ? new Money(customer.MonthlyDebt.Value, request.Currency) : null,
             HasActiveLoans = hasActiveLoans
         };
 
-        var evaluation = await _contractEngine.EvaluateAsync(evaluationContext);
+        var evaluation = await _contractEngine.EvaluateAsync(evaluationContext, cancellationToken);
+
+        foreach (var result in evaluation.Results)
+        {
+            _logger.LogInformation(
+                "Rule {Rule} evaluated: Passed={Passed}, Message={Message}",
+                result.RuleName, result.Passed, result.Message);
+        }
 
         if (!evaluation.Approved)
         {
@@ -84,6 +92,10 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
 
             return CreateContractResponse.Rejected(evaluation.Results);
         }
+
+        _logger.LogInformation(
+            "Contract approved for customer {CustomerId}. Final rate: {Rate}%, Rules evaluated: {Count}",
+            customer.Id, evaluation.InterestRate, evaluation.Results.Count);
 
         var calculator = _calculatorFactory.GetCalculator(request.AmortizationMethod);
 
@@ -106,10 +118,8 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
             }
         );
 
-        // Guardar eventos ANTES de persistir
         var events = aggregate.UncommittedEvents.ToList();
 
-        // 4. Persistir eventos (fuente de verdad)
         await _repository.SaveAsync(aggregate, cancellationToken);
 
         // 5. Proyectar eventos a Read Models

@@ -3,6 +3,7 @@ using CreditSystem.Domain.Abstractions;
 using CreditSystem.Domain.Abstractions.Projections;
 using CreditSystem.Domain.Abstractions.Services;
 using CreditSystem.Domain.Exceptions;
+using CreditSystem.Domain.Models;
 using CreditSystem.Domain.Models.ReadModels;
 using CreditSystem.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;
@@ -17,26 +18,28 @@ public class PaymentMissedJob : IPaymentMissedJob
     private readonly IProjectionEngine _projectionEngine;
     private readonly ILogger<PaymentMissedJob> _logger;
     private readonly LateFeeConfiguration _lateFeeConfig;
+    private readonly UnderwritingPolicy _policy;
 
     public PaymentMissedJob(
         ILoanQueryService queryService,
         ILoanContractRepository repository,
         IProjectionEngine projectionEngine,
         IOptions<LateFeeConfiguration> lateFeeConfig,
-        ILogger<PaymentMissedJob> logger)
+        ILogger<PaymentMissedJob> logger,
+        UnderwritingPolicy policy)
     {
         _queryService = queryService;
         _repository = repository;
         _projectionEngine = projectionEngine;
         _lateFeeConfig = lateFeeConfig.Value;
         _logger = logger;
+        _policy = policy;
     }
 
     public async Task ExecuteAsync(CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Starting payment missed detection job at {Time}", DateTime.UtcNow);
 
-        // 1. Obtener préstamos con pagos vencidos
         var overdueLoans = await _queryService.GetLoansWithOverduePaymentsAsync(cancellationToken);
 
         _logger.LogInformation("Found {Count} loans with overdue payments", overdueLoans.Count);
@@ -67,7 +70,6 @@ public class PaymentMissedJob : IPaymentMissedJob
         OverdueLoanInfo loan,
         CancellationToken cancellationToken)
     {
-        // 1. Cargar aggregate
         var aggregate = await _repository.GetByIdAsync(loan.LoanId, cancellationToken);
 
         if (aggregate == null)
@@ -76,16 +78,15 @@ public class PaymentMissedJob : IPaymentMissedJob
             return;
         }
 
-        // 2. Calcular late fee
         var lateFee = CalculateLateFee(loan);
 
-        // 3. Ejecutar registro de pago perdido
         try
         {
             aggregate.RecordMissedPayment(
                 loan.PaymentNumber,
                 loan.DueDate,
-                lateFee);
+                lateFee,
+                _policy.AutoDefaultThresholdDays);
         }
         catch (DomainException ex)
         {
@@ -114,20 +115,20 @@ public class PaymentMissedJob : IPaymentMissedJob
 
     private Money CalculateLateFee(OverdueLoanInfo loan)
     {
-        // Opción 1: Porcentaje del pago
+        // Option 1: percentage of payment
         var percentageFee = loan.AmountDue * (_lateFeeConfig.PercentageOfPayment / 100);
 
-        // Opción 2: Monto fijo
+        // Option 2: fixed amount
         var fixedFee = _lateFeeConfig.FixedAmount;
 
-        // Opción 3: Por día de atraso
+        // Option 3: daily charge
         var dailyFee = loan.DaysOverdue * _lateFeeConfig.DailyAmount;
 
-        // Usar el mayor entre porcentaje y fijo, más el cargo diario
+        // Use the greater of percentage or fixed, plus the daily charge
         var baseFee = Math.Max(percentageFee, fixedFee);
         var totalFee = baseFee + dailyFee;
 
-        // Aplicar tope máximo
+        // Apply maximum cap
         var cappedFee = Math.Min(totalFee, _lateFeeConfig.MaximumFee);
 
         return new Money(cappedFee, loan.Currency);

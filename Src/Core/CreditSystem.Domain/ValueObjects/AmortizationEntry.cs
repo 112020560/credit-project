@@ -11,7 +11,7 @@ public record AmortizationEntry
     public Money Interest { get; init; }
     public Money Balance { get; init; }
 
-    // Constructor sin parámetros para deserialización
+    // Parameterless constructor for deserialization
     [JsonConstructor]
     public AmortizationEntry()
     {

@@ -24,7 +24,7 @@ public class GetPayoffAmountQueryHandler : IRequestHandler<GetPayoffAmountQuery,
         var state = aggregate.State;
         var asOfDate = request.AsOfDate ?? DateTime.UtcNow;
 
-        // Calcular interés adicional si hay días desde última acumulación
+        // Calculate accrued interest since the last accrual date
         var additionalInterest = 0m;
         if (state.LastInterestAccrualDate.HasValue)
         {
@@ -47,7 +47,7 @@ public class GetPayoffAmountQueryHandler : IRequestHandler<GetPayoffAmountQuery,
             PendingFees = state.TotalFees.Amount,
             TotalPayoffAmount = totalPayoff,
             CalculatedAsOf = asOfDate,
-            ValidUntil = asOfDate.Date.AddDays(10), // Válido por 10 días
+            ValidUntil = asOfDate.Date.AddDays(10), // Valid for 10 days
             Currency = state.Principal.Currency
         };
     }

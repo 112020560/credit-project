@@ -19,7 +19,7 @@ public class GermanAmortizationCalculator : IAmortizationCalculator
             var interest = rate.CalculateMonthlyInterest(balance);
             var principalPaid = fixedPrincipal;
 
-            // Ajustar último pago
+            // Adjust final payment for rounding residual
             if (i == termMonths)
             {
                 principalPaid = balance;

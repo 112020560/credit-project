@@ -38,13 +38,12 @@ public class ApplyPaymentCommandHandler : IRequestHandler<ApplyPaymentCommand, A
             return ApplyPaymentResponse.Failed($"Loan {request.LoanId} not found");
         }
 
-        // 2. Parsear método de pago
+        // 2. Parse payment method
         if (!Enum.TryParse<PaymentMethod>(request.PaymentMethod, true, out var paymentMethod))
         {
             return ApplyPaymentResponse.Failed($"Invalid payment method: {request.PaymentMethod}");
         }
 
-        // 3. Ejecutar comando en el aggregate
         var paymentId = Guid.NewGuid();
         var amount = new Money(request.Amount, request.Currency);
 
@@ -70,21 +69,17 @@ public class ApplyPaymentCommandHandler : IRequestHandler<ApplyPaymentCommand, A
             return ApplyPaymentResponse.Failed("Payment event not generated");
         }
 
-        // Guardar eventos ANTES de persistir
         var events = aggregate.UncommittedEvents.ToList();
 
-        // 5. Persistir eventos (fuente de verdad)
         await _repository.SaveAsync(aggregate, cancellationToken);
 
-        // 6. Proyectar eventos a read models
         try
         {
             await _projectionEngine.ProjectEventsAsync(events, cancellationToken);
         }
         catch (Exception ex)
         {
-            // Los eventos ya están persistidos - la proyección puede reconstruirse
-            // Loguear como warning y continuar para no perder la respuesta al cliente
+            // Events are already persisted — projections can be rebuilt from the event store
             _logger.LogWarning(ex,
                 "Failed to project events for loan {LoanId}. Events are persisted and read models can be rebuilt.",
                 request.LoanId);

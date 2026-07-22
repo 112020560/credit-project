@@ -12,8 +12,7 @@ public class DebtToIncomeRule : IContractRule
         ContractEvaluationContext context, 
         CancellationToken ct = default)
     {
-        // Si no hay datos de ingresos, pasar la regla
-        if (!context.MonthlyIncome.HasValue || context.MonthlyIncome.Value <= 0)
+        if (context.MonthlyIncome == null || context.MonthlyIncome.Amount <= 0)
         {
             return Task.FromResult(RuleEvaluationResult.Pass(
                 RuleName,
@@ -22,10 +21,10 @@ public class DebtToIncomeRule : IContractRule
             ));
         }
 
-        var monthlyDebt = context.MonthlyDebt ?? 0;
-        var estimatedPayment = CalculateMonthlyPayment(context.RequestedAmount, context.TermMonths);
+        var monthlyDebt = context.MonthlyDebt?.Amount ?? 0;
+        var estimatedPayment = CalculateMonthlyPayment(context.RequestedAmount.Amount, context.TermMonths);
         var totalDebt = monthlyDebt + estimatedPayment;
-        var dtiRatio = totalDebt / context.MonthlyIncome.Value;
+        var dtiRatio = totalDebt / context.MonthlyIncome.Amount;
 
         if (dtiRatio > MaxDtiRatio)
         {
@@ -35,7 +34,7 @@ public class DebtToIncomeRule : IContractRule
                 new Dictionary<string, object>
                 {
                     ["DTI"] = dtiRatio,
-                    ["MonthlyIncome"] = context.MonthlyIncome.Value,
+                    ["MonthlyIncome"] = context.MonthlyIncome.Amount,
                     ["TotalMonthlyDebt"] = totalDebt
                 }
             ));
@@ -56,8 +55,8 @@ public class DebtToIncomeRule : IContractRule
 
     private static decimal CalculateMonthlyPayment(decimal amount, int months)
     {
-        // Estimación simple para evaluación
-        var estimatedRate = 0.12m / 12; // 12% anual
+        // Simple estimation for underwriting evaluation
+        var estimatedRate = 0.12m / 12; // 12% annual
         if (estimatedRate == 0) return amount / months;
         
         var payment = amount * (estimatedRate * (decimal)Math.Pow((double)(1 + estimatedRate), months)) 

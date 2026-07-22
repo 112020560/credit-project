@@ -33,7 +33,6 @@ public class PayoffContractCommandHandler : IRequestHandler<PayoffContractComman
         PayoffContractCommand request,
         CancellationToken cancellationToken)
     {
-        // 1. Obtener monto de payoff
         var payoffQuery = new GetPayoffAmountQuery { LoanId = request.LoanId };
         var payoffInfo = await _mediator.Send(payoffQuery, cancellationToken);
 
@@ -43,7 +42,6 @@ public class PayoffContractCommandHandler : IRequestHandler<PayoffContractComman
             return PayoffContractResponse.Failed($"Loan {request.LoanId} not found");
         }
 
-        // 2. Cargar aggregate
         var aggregate = await _repository.GetByIdAsync(request.LoanId, cancellationToken);
 
         if (aggregate == null)
@@ -51,13 +49,12 @@ public class PayoffContractCommandHandler : IRequestHandler<PayoffContractComman
             return PayoffContractResponse.Failed($"Loan {request.LoanId} not found");
         }
 
-        // 3. Verificar estado
         if (aggregate.State.Status == ContractStatus.PaidOff)
         {
             return PayoffContractResponse.Failed("Loan is already paid off");
         }
 
-        if (aggregate.State.Status != ContractStatus.Active && 
+        if (aggregate.State.Status != ContractStatus.Active &&
             aggregate.State.Status != ContractStatus.Delinquent &&
             aggregate.State.Status != ContractStatus.Restructured)
         {
@@ -65,13 +62,11 @@ public class PayoffContractCommandHandler : IRequestHandler<PayoffContractComman
                 $"Cannot payoff loan with status: {aggregate.State.Status}");
         }
 
-        // 4. Parsear método de pago
         if (!Enum.TryParse<PaymentMethod>(request.PaymentMethod, true, out var paymentMethod))
         {
             return PayoffContractResponse.Failed($"Invalid payment method: {request.PaymentMethod}");
         }
 
-        // 5. Aplicar pago total
         var paymentId = Guid.NewGuid();
         var payoffAmount = new Money(payoffInfo.TotalPayoffAmount, payoffInfo.Currency);
 
@@ -87,7 +82,6 @@ public class PayoffContractCommandHandler : IRequestHandler<PayoffContractComman
             return PayoffContractResponse.Failed(ex.Message);
         }
 
-        // 6. Obtener eventos generados
         var paymentEvent = aggregate.UncommittedEvents
             .OfType<PaymentApplied>()
             .FirstOrDefault();
@@ -101,10 +95,8 @@ public class PayoffContractCommandHandler : IRequestHandler<PayoffContractComman
             return PayoffContractResponse.Failed("Payoff did not complete - balance may not be zero");
         }
 
-        // Guardar eventos ANTES de persistir
         var events = aggregate.UncommittedEvents.ToList();
 
-        // 7. Persistir (fuente de verdad)
         await _repository.SaveAsync(aggregate, cancellationToken);
 
         // 8. Proyectar a Read Models

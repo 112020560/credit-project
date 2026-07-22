@@ -13,6 +13,8 @@ using CreditSystem.Application.Queries.GetPaidOffLoans;
 using CreditSystem.Application.Queries.GetPaymentHistory;
 using CreditSystem.Application.Queries.GetPayoffAmount;
 using CreditSystem.Application.Queries.GetRestructureHistory;
+
+using CreditSystem.Domain.Abstractions.Repositories;
 using CreditSystem.Domain.Abstractions.Services;
 using FluentValidation;
 using MediatR;
@@ -24,7 +26,7 @@ public static class LoanContractEndpoints
 {
     public static void MapLoanContractEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/loans")
+        var group = app.MapGroup("/loans")
             .WithTags("Loan Contracts")
             .WithOpenApi();
 
@@ -128,7 +130,7 @@ public static class LoanContractEndpoints
 
     public static void MapDelinquentLoansEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/delinquent-loans")
+        var group = app.MapGroup("/delinquent-loans")
             .WithTags("Delinquent Loans")
             .WithOpenApi();
 
@@ -237,7 +239,7 @@ public static class LoanContractEndpoints
     private static async Task<IResult> GetCustomerLoans(
         Guid externalCustomerId,
         [FromServices] IMediator mediator,
-        [FromServices] ICustomerService customerService,
+        [FromServices] ICustomerReadRepository customerService,
         [FromServices] ILoanQueryService queryService,
         CancellationToken cancellationToken)
     {
