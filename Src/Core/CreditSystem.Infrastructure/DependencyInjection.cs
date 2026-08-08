@@ -146,7 +146,7 @@ public static class DependencyInjection
     {
         services.AddScoped<ICustomerReadRepository>(sp =>
             new CustomerReadRepository(configuration.GetConnectionString("CreditDb")!));
-        services.AddScoped<ICustomerReferenceRepository, CustomerReferenceRepository>();
+        services.AddScoped<ICustomerCreditProfileRepository, CustomerCreditProfileRepository>();
         
         services.AddMassTransit(x =>
         {

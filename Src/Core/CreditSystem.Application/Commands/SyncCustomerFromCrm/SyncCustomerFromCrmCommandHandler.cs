@@ -6,11 +6,11 @@ namespace CreditSystem.Application.Commands.SyncCustomerFromCrm;
 
 public class SyncCustomerFromCrmCommandHandler : IRequestHandler<SyncCustomerFromCrmCommand>
 {
-    private readonly ICustomerReferenceRepository _repository;
+    private readonly ICustomerCreditProfileRepository _repository;
     private readonly ILogger<SyncCustomerFromCrmCommandHandler> _logger;
 
     public SyncCustomerFromCrmCommandHandler(
-        ICustomerReferenceRepository repository,
+        ICustomerCreditProfileRepository repository,
         ILogger<SyncCustomerFromCrmCommandHandler> logger)
     {
         _repository = repository;

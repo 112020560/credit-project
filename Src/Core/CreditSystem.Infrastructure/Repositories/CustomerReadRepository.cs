@@ -16,7 +16,7 @@ public class CustomerReadRepository : ICustomerReadRepository
 
     public async Task<CustomerCreditProfile?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
-        const string sql = "SELECT * FROM customer_references WHERE id = @Id";
+        const string sql = "SELECT * FROM customer_credit_profiles WHERE id = @Id";
 
         await using var connection = new NpgsqlConnection(_connectionString);
         return await connection.QuerySingleOrDefaultAsync<CustomerCreditProfile>(sql, new { Id = id });
@@ -24,7 +24,7 @@ public class CustomerReadRepository : ICustomerReadRepository
 
     public async Task<CustomerCreditProfile?> GetByExternalIdAsync(Guid externalId, CancellationToken ct = default)
     {
-        const string sql = "SELECT * FROM customer_references WHERE external_id = @ExternalId";
+        const string sql = "SELECT * FROM customer_credit_profiles WHERE external_id = @ExternalId";
 
         await using var connection = new NpgsqlConnection(_connectionString);
         return await connection.QuerySingleOrDefaultAsync<CustomerCreditProfile>(sql, new { ExternalId = externalId });
@@ -32,7 +32,7 @@ public class CustomerReadRepository : ICustomerReadRepository
 
     public async Task<CustomerCreditProfile?> GetByDocumentAsync(string documentNumber, CancellationToken ct = default)
     {
-        const string sql = "SELECT * FROM customer_references WHERE document_number = @DocumentNumber";
+        const string sql = "SELECT * FROM customer_credit_profiles WHERE document_number = @DocumentNumber";
 
         await using var connection = new NpgsqlConnection(_connectionString);
         return await connection.QuerySingleOrDefaultAsync<CustomerCreditProfile>(sql, new { DocumentNumber = documentNumber });

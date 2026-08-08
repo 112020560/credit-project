@@ -1,6 +1,6 @@
 namespace CreditSystem.Domain.Abstractions.Repositories;
 
-public interface ICustomerReferenceRepository
+public interface ICustomerCreditProfileRepository
 {
     Task UpsertAsync(
         Guid externalId,
