@@ -147,12 +147,15 @@ public static class DependencyInjection
         services.AddScoped<ICustomerReadRepository>(sp =>
             new CustomerReadRepository(configuration.GetConnectionString("CreditDb")!));
         services.AddScoped<ICustomerCreditProfileRepository, CustomerCreditProfileRepository>();
+        services.AddScoped<ICooperativeMemberRepository>(sp =>
+            new CooperativeMemberRepository(configuration.GetConnectionString("CreditDb")!));
         
         services.AddMassTransit(x =>
         {
             // Customer event consumers
             x.AddConsumer<CustomerCreatedConsumer>();
             x.AddConsumer<CustomerUpdatedConsumer>();
+            x.AddConsumer<MemberSyncedConsumer>();
 
             // Async payment consumers
             x.AddConsumer<ProcessPaymentConsumer>();
@@ -167,6 +170,7 @@ public static class DependencyInjection
                 {
                     e.ConfigureConsumer<CustomerCreatedConsumer>(context);
                     e.ConfigureConsumer<CustomerUpdatedConsumer>(context);
+                    e.ConfigureConsumer<MemberSyncedConsumer>(context);
                 });
 
                 // Async payment processing endpoint

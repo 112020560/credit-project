@@ -2,9 +2,8 @@ using CreditSystem.Domain.Abstractions;
 using CreditSystem.Domain.Abstractions.Projections;
 using CreditSystem.Domain.Abstractions.Repositories;
 using CreditSystem.Domain.Abstractions.Services;
-using CreditSystem.Domain.ValueObjects;
-
 using CreditSystem.Domain.Aggregates.LoanContract;
+using CreditSystem.Domain.Models;
 using CreditSystem.Domain.Rules;
 using CreditSystem.Domain.Services.Amortization;
 using CreditSystem.Domain.ValueObjects;
@@ -17,8 +16,10 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
 {
     private readonly ILoanContractRepository _repository;
     private readonly ICustomerReadRepository _customerService;
+    private readonly ICooperativeMemberRepository _memberRepository;
     private readonly ILoanQueryService _queryService;
     private readonly ContractEngine _contractEngine;
+    private readonly UnderwritingPolicy _policy;
     private readonly IAmortizationCalculatorFactory _calculatorFactory;
     private readonly IProjectionEngine _projectionEngine;
     private readonly ILogger<CreateContractCommandHandler> _logger;
@@ -26,16 +27,20 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
     public CreateContractCommandHandler(
         ILoanContractRepository repository,
         ICustomerReadRepository customerService,
+        ICooperativeMemberRepository memberRepository,
         ILoanQueryService queryService,
         ContractEngine contractEngine,
+        UnderwritingPolicy policy,
         IAmortizationCalculatorFactory calculatorFactory,
         IProjectionEngine projectionEngine,
         ILogger<CreateContractCommandHandler> logger)
     {
         _repository = repository;
         _customerService = customerService;
+        _memberRepository = memberRepository;
         _queryService = queryService;
         _contractEngine = contractEngine;
+        _policy = policy;
         _calculatorFactory = calculatorFactory;
         _projectionEngine = projectionEngine;
         _logger = logger;
@@ -51,17 +56,22 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
 
         if (customer == null)
         {
-            _logger.LogWarning(
-                "Customer not found for external ID {ExternalId}", 
-                request.ExternalCustomerId);
-            
-            return CreateContractResponse.Failed(
-                $"Customer with external ID {request.ExternalCustomerId} not found");
+            _logger.LogWarning("Customer not found for external ID {ExternalId}", request.ExternalCustomerId);
+            return CreateContractResponse.Failed($"Customer with external ID {request.ExternalCustomerId} not found");
         }
-        
+
+        // Resolver membresía cooperativa
+        var member = await _memberRepository.GetByExternalIdAsync(request.ExternalCustomerId, cancellationToken);
+
+        if (member == null && _policy.RequireActiveMembership)
+        {
+            _logger.LogWarning("Applicant {ExternalId} is not a registered cooperative member", request.ExternalCustomerId);
+            return CreateContractResponse.Failed("Applicant is not a registered cooperative member");
+        }
+
         var hasActiveLoans = await _queryService.HasActiveLoansAsync(customer.Id, cancellationToken);
 
-        // 2. Evaluar reglas del motor de Smart Contract
+        // 2. Evaluar reglas del motor
         var evaluationContext = new ContractEvaluationContext
         {
             Customer = customer,
@@ -71,7 +81,9 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
             CreditScore = customer.CreditScore,
             MonthlyIncome = customer.MonthlyIncome.HasValue ? new Money(customer.MonthlyIncome.Value, request.Currency) : null,
             MonthlyDebt = customer.MonthlyDebt.HasValue ? new Money(customer.MonthlyDebt.Value, request.Currency) : null,
-            HasActiveLoans = hasActiveLoans
+            HasActiveLoans = hasActiveLoans,
+            MemberSharesAmount = member?.State.Shares.TotalAmount,
+            IsActiveMember = member != null ? member.State.Status == Domain.Enums.MemberStatus.Active : null
         };
 
         var evaluation = await _contractEngine.EvaluateAsync(evaluationContext, cancellationToken);

@@ -19,6 +19,7 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        services.AddScoped<IContractRule, MemberSharesRule>();
         services.AddScoped<IContractRule, MaxLoanAmountRule>();
         services.AddScoped<IContractRule, CreditScoreRule>();
         services.AddScoped<IContractRule, DebtToIncomeRule>();

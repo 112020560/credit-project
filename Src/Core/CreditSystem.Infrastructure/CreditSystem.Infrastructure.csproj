@@ -22,7 +22,7 @@
       <PackageReference Include="Microsoft.Extensions.Options" Version="9.0.11" />
       <PackageReference Include="Npgsql" Version="9.0.3" />
       <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.0" />
-      <PackageReference Include="SharedKernel" Version="1.0.0" />
+      <ProjectReference Include="..\..\Shared\SharedKernel\SharedKernel.csproj" />
     </ItemGroup>
 
 </Project>

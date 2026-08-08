@@ -74,6 +74,7 @@ var v1 = app.MapGroup("/api/v{version:apiVersion}")
     .WithApiVersionSet(versionSet);
 
 v1.MapLoanContractEndpoints();
+v1.MapMemberEndpoints();
 v1.MapAdminEndpoints();
 v1.MapDelinquentLoansEndpoints();
 v1.MapRevolvingCreditEndpoints();
