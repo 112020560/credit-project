@@ -21,6 +21,7 @@ public class CreateContractCommandHandlerTests
     private readonly ICustomerReadRepository _customerRepo = Substitute.For<ICustomerReadRepository>();
     private readonly ICooperativeMemberRepository _memberRepo = Substitute.For<ICooperativeMemberRepository>();
     private readonly ICreditProductRepository _productRepo = Substitute.For<ICreditProductRepository>();
+    private readonly ILoanGuaranteeRepository _guaranteeRepo = Substitute.For<ILoanGuaranteeRepository>();
     private readonly ILoanQueryService _queryService = Substitute.For<ILoanQueryService>();
     private readonly IProjectionEngine _projectionEngine = Substitute.For<IProjectionEngine>();
     private readonly IAmortizationCalculatorFactory _calcFactory = Substitute.For<IAmortizationCalculatorFactory>();
@@ -56,6 +57,7 @@ public class CreateContractCommandHandlerTests
             _customerRepo,
             _memberRepo,
             _productRepo,
+            _guaranteeRepo,
             _queryService,
             engine,
             DefaultPolicy,
@@ -148,5 +150,71 @@ public class CreateContractCommandHandlerTests
 
         result.Success.Should().BeFalse();
         result.Message.Should().Contain("not found");
+    }
+
+    [Fact]
+    public async Task Handle_WithoutGuarantees_CollateralValueIsNull()
+    {
+        var product = ActiveProduct(baseRate: 14.0m);
+
+        _customerRepo.GetByExternalIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(SampleCustomer);
+        _productRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(product);
+        _memberRepo.GetByExternalIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns((CreditSystem.Domain.Aggregates.CooperativeMember.CooperativeMemberAggregate?)null);
+        _queryService.HasActiveLoansAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+        _loanRepo.SaveAsync(Arg.Any<CreditSystem.Domain.Aggregates.LoanContract.LoanContractAggregate>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var handler = BuildHandler();
+        var command = ValidCommand(product.Id); // no Guarantees
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        // No guarantees → guarantee repo should not be called
+        await _guaranteeRepo.DidNotReceive().InsertAsync(Arg.Any<CreditSystem.Domain.Entities.LoanGuarantee>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WithGuarantees_EffectiveCollateralSummedAndGuaranteesPersisted()
+    {
+        var product = ActiveProduct(baseRate: 14.0m);
+
+        _customerRepo.GetByExternalIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(SampleCustomer);
+        _productRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(product);
+        _memberRepo.GetByExternalIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns((CreditSystem.Domain.Aggregates.CooperativeMember.CooperativeMemberAggregate?)null);
+        _queryService.HasActiveLoansAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+        _loanRepo.SaveAsync(Arg.Any<CreditSystem.Domain.Aggregates.LoanContract.LoanContractAggregate>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        _guaranteeRepo.InsertAsync(Arg.Any<CreditSystem.Domain.Entities.LoanGuarantee>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var command = new CreateContractCommand
+        {
+            ExternalCustomerId = SampleCustomer.ExternalId,
+            ProductId = product.Id,
+            Amount = 500_000m,
+            Currency = "CRC",
+            TermMonths = 12,
+            AmortizationMethod = AmortizationMethod.French,
+            Guarantees =
+            [
+                new GuaranteeInput(CreditSystem.Domain.Enums.GuaranteeType.Hipoteca, "Casa", 1_000_000m, 0.80m),
+                new GuaranteeInput(CreditSystem.Domain.Enums.GuaranteeType.Prenda, "Vehículo", 500_000m, 1.0m)
+            ]
+        };
+
+        var handler = BuildHandler();
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        // Two guarantees → InsertAsync called twice
+        await _guaranteeRepo.Received(2).InsertAsync(Arg.Any<CreditSystem.Domain.Entities.LoanGuarantee>(), Arg.Any<CancellationToken>());
     }
 }

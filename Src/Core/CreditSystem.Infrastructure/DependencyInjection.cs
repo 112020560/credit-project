@@ -126,6 +126,9 @@ public static class DependencyInjection
         services.AddScoped<ICreditProductRepository>(sp =>
             new CreditProductRepository(connectionString));
 
+        services.AddScoped<ILoanGuaranteeRepository>(sp =>
+            new LoanGuaranteeRepository(connectionString));
+
         return services;
     }
 

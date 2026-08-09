@@ -29,9 +29,20 @@ public class CreateContractCommandValidator : AbstractValidator<CreateContractCo
             .InclusiveBetween(1, 360)
             .WithMessage("Term must be between 1 and 360 months");
 
-        RuleFor(x => x.CollateralValue)
-            .GreaterThan(0)
-            .When(x => x.CollateralValue.HasValue)
-            .WithMessage("Collateral value must be greater than zero when provided");
+        RuleForEach(x => x.Guarantees)
+            .ChildRules(g =>
+            {
+                g.RuleFor(gi => gi.AppraisalValue)
+                    .GreaterThan(0)
+                    .WithMessage("Guarantee appraisal value must be greater than zero");
+                g.RuleFor(gi => gi.CoverageRate)
+                    .GreaterThan(0)
+                    .LessThanOrEqualTo(1)
+                    .WithMessage("Coverage rate must be between 0 (exclusive) and 1 (inclusive)");
+                g.RuleFor(gi => gi.Description)
+                    .NotEmpty()
+                    .WithMessage("Guarantee description is required");
+            })
+            .When(x => x.Guarantees != null && x.Guarantees.Count > 0);
     }
 }

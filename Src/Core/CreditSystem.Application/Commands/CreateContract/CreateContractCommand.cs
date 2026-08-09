@@ -3,6 +3,12 @@ using MediatR;
 
 namespace CreditSystem.Application.Commands.CreateContract;
 
+public record GuaranteeInput(
+    GuaranteeType Type,
+    string Description,
+    decimal AppraisalValue,
+    decimal CoverageRate);
+
 public record CreateContractCommand : IRequest<CreateContractResponse>
 {
     public Guid ExternalCustomerId { get; init; }  // ID del CRM
@@ -10,6 +16,6 @@ public record CreateContractCommand : IRequest<CreateContractResponse>
     public decimal Amount { get; init; }
     public string Currency { get; init; } = "USD";
     public int TermMonths { get; init; }
-    public decimal? CollateralValue { get; init; }
+    public IReadOnlyList<GuaranteeInput>? Guarantees { get; init; }
     public AmortizationMethod AmortizationMethod { get; init; } = AmortizationMethod.French;
 }

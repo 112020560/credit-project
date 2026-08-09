@@ -3,6 +3,7 @@ using CreditSystem.Domain.Abstractions.Projections;
 using CreditSystem.Domain.Abstractions.Repositories;
 using CreditSystem.Domain.Abstractions.Services;
 using CreditSystem.Domain.Aggregates.LoanContract;
+using CreditSystem.Domain.Entities;
 using CreditSystem.Domain.Enums;
 using CreditSystem.Domain.Models;
 using CreditSystem.Domain.Rules;
@@ -19,6 +20,7 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
     private readonly ICustomerReadRepository _customerService;
     private readonly ICooperativeMemberRepository _memberRepository;
     private readonly ICreditProductRepository _productRepository;
+    private readonly ILoanGuaranteeRepository _guaranteeRepository;
     private readonly ILoanQueryService _queryService;
     private readonly ContractEngine _contractEngine;
     private readonly UnderwritingPolicy _policy;
@@ -31,6 +33,7 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
         ICustomerReadRepository customerService,
         ICooperativeMemberRepository memberRepository,
         ICreditProductRepository productRepository,
+        ILoanGuaranteeRepository guaranteeRepository,
         ILoanQueryService queryService,
         ContractEngine contractEngine,
         UnderwritingPolicy policy,
@@ -42,6 +45,7 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
         _customerService = customerService;
         _memberRepository = memberRepository;
         _productRepository = productRepository;
+        _guaranteeRepository = guaranteeRepository;
         _queryService = queryService;
         _contractEngine = contractEngine;
         _policy = policy;
@@ -90,13 +94,21 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
 
         var hasActiveLoans = await _queryService.HasActiveLoansAsync(customer.Id, cancellationToken);
 
+        // Calcular colateral efectivo desde garantías provistas
+        Money? effectiveCollateral = null;
+        if (request.Guarantees != null && request.Guarantees.Count > 0)
+        {
+            var totalCoverage = request.Guarantees.Sum(g => g.AppraisalValue * g.CoverageRate);
+            effectiveCollateral = new Money(totalCoverage, request.Currency);
+        }
+
         // 2. Evaluar reglas del motor
         var evaluationContext = new ContractEvaluationContext
         {
             Customer = customer,
             RequestedAmount = new Money(request.Amount, request.Currency),
             TermMonths = request.TermMonths,
-            CollateralValue = request.CollateralValue.HasValue ? new Money(request.CollateralValue.Value, request.Currency) : null,
+            CollateralValue = effectiveCollateral,
             CreditScore = customer.CreditScore,
             MonthlyIncome = customer.MonthlyIncome.HasValue ? new Money(customer.MonthlyIncome.Value, request.Currency) : null,
             MonthlyDebt = customer.MonthlyDebt.HasValue ? new Money(customer.MonthlyDebt.Value, request.Currency) : null,
@@ -146,7 +158,7 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
             evaluationMetadata: new Dictionary<string, object>
             {
                 ["ExternalCustomerId"] = request.ExternalCustomerId,
-                ["CollateralValue"] = request.CollateralValue ?? 0,
+                ["CollateralValue"] = effectiveCollateral?.Amount ?? 0,
                 ["EvaluationResults"] = evaluation.Results
             }
         );
@@ -154,6 +166,31 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
         var events = aggregate.UncommittedEvents.ToList();
 
         await _repository.SaveAsync(aggregate, cancellationToken);
+
+        // Persistir garantías si el contrato fue aprobado
+        if (request.Guarantees != null && request.Guarantees.Count > 0)
+        {
+            foreach (var input in request.Guarantees)
+            {
+                var guarantee = new LoanGuarantee(
+                    Guid.NewGuid(),
+                    aggregate.Id,
+                    input.Type,
+                    input.Description,
+                    new GuaranteeValuation(input.AppraisalValue, input.CoverageRate));
+
+                try
+                {
+                    await _guaranteeRepository.InsertAsync(guarantee, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex,
+                        "Failed to persist guarantee for contract {ContractId}. Guarantee type: {Type}",
+                        aggregate.Id, input.Type);
+                }
+            }
+        }
 
         // 5. Proyectar eventos a Read Models
         try
