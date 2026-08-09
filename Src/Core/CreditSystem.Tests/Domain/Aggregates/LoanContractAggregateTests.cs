@@ -461,6 +461,111 @@ public class LoanContractAggregateTests
 
     #endregion
 
+    #region Origination Fee Tests
+
+    [Fact]
+    public void Create_WithOriginationFee_ShouldInitializeTotalFees()
+    {
+        // Arrange
+        var fee = new Money(250m, "USD");
+
+        // Act
+        var contract = LoanContractAggregate.Create(
+            customerId: Guid.NewGuid(),
+            principal: new Money(10000m, "USD"),
+            rate: new InterestRate(12m),
+            termMonths: 12,
+            amortizationMethod: AmortizationMethod.French,
+            calculator: _calculator,
+            evaluationMetadata: new Dictionary<string, object>(),
+            originationFee: fee);
+
+        // Assert
+        contract.State.TotalFees.Amount.Should().Be(250m);
+        contract.State.OriginationFee.Amount.Should().Be(250m);
+    }
+
+    [Fact]
+    public void Create_WithoutOriginationFee_ShouldHaveZeroFees()
+    {
+        // Act
+        var contract = CreateValidContract();
+
+        // Assert
+        contract.State.TotalFees.Amount.Should().Be(0m);
+        contract.State.OriginationFee.Amount.Should().Be(0m);
+    }
+
+    #endregion
+
+    #region Penalty Interest Tests
+
+    [Fact]
+    public void RecordMissedPayment_WithPenaltyInterest_ShouldAccumulateAccruedPenaltyInterest()
+    {
+        // Arrange
+        var contract = CreateValidContract(principal: 10000m);
+        contract.Disburse("WIRE", "123");
+        var penalty = new Money(15m, "USD");
+
+        // Act
+        contract.RecordMissedPayment(1, DateTime.UtcNow.AddDays(-35), new Money(25m, "USD"), penaltyInterest: penalty);
+
+        // Assert
+        contract.State.AccruedPenaltyInterest.Amount.Should().Be(15m);
+    }
+
+    [Fact]
+    public void RecordMissedPayment_WithoutPenaltyInterest_ShouldNotChangeAccruedPenaltyInterest()
+    {
+        // Arrange
+        var contract = CreateValidContract(principal: 10000m);
+        contract.Disburse("WIRE", "123");
+
+        // Act
+        contract.RecordMissedPayment(1, DateTime.UtcNow.AddDays(-35), new Money(25m, "USD"));
+
+        // Assert
+        contract.State.AccruedPenaltyInterest.Amount.Should().Be(0m);
+    }
+
+    [Fact]
+    public void ApplyPayment_WithPenaltyInterest_ShouldApplyFeesFirst_ThenPenalty_ThenInterest_ThenPrincipal()
+    {
+        // Arrange
+        var contract = LoanContractAggregate.Create(
+            customerId: Guid.NewGuid(),
+            principal: new Money(10000m, "USD"),
+            rate: new InterestRate(12m),
+            termMonths: 12,
+            amortizationMethod: AmortizationMethod.French,
+            calculator: _calculator,
+            evaluationMetadata: new Dictionary<string, object>(),
+            originationFee: new Money(100m, "USD")); // TotalFees = 100
+
+        contract.Disburse("WIRE", "123");
+
+        // Accrue some regular interest
+        contract.AccrueInterest(DateTime.UtcNow.AddDays(-30), DateTime.UtcNow);
+
+        // Record missed payment with penalty interest
+        contract.RecordMissedPayment(1, DateTime.UtcNow.AddDays(-35), Money.Zero("USD"), penaltyInterest: new Money(50m, "USD"));
+
+        var totalFeesBefore = contract.State.TotalFees.Amount;          // 100 (origination) + 0 (late fee)
+        var penaltyBefore = contract.State.AccruedPenaltyInterest.Amount; // 50
+        var interestBefore = contract.State.AccruedInterest.Amount;
+
+        // Act: pay exactly enough to cover fees + penalty (100 + 50 = 150)
+        contract.ApplyPayment(Guid.NewGuid(), new Money(150m, "USD"), PaymentMethod.Wire);
+
+        // Assert: fees fully paid, penalty fully paid, interest untouched
+        contract.State.TotalFees.Amount.Should().Be(0m);
+        contract.State.AccruedPenaltyInterest.Amount.Should().Be(0m);
+        contract.State.AccruedInterest.Amount.Should().Be(interestBefore); // not reduced
+    }
+
+    #endregion
+
     #region Event Sourcing Tests
 
     [Fact]

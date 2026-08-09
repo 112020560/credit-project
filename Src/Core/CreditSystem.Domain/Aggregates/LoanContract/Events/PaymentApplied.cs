@@ -10,6 +10,7 @@ public record PaymentApplied : DomainEvent
     public Money TotalAmount { get; init; }
     public Money PrincipalPaid { get; init; }
     public Money InterestPaid { get; init; }
+    public Money PenaltyInterestPaid { get; init; }
     public Money FeePaid { get; init; }
     public Money NewBalance { get; init; }
     public int PaymentNumber { get; init; }

@@ -11,6 +11,8 @@ public class LoanSummaryReadModel
     public decimal CurrentBalance { get; set; }
     public decimal AccruedInterest { get; set; }
     public decimal TotalFees { get; set; }
+    public decimal OriginationFee { get; set; }
+    public decimal AccruedPenaltyInterest { get; set; }
     public decimal InterestRate { get; set; }
     public int TermMonths { get; set; }
     public string Status { get; set; } = null!;
@@ -28,7 +30,7 @@ public class LoanSummaryReadModel
 
     // Computed
     [JsonIgnore]
-    public decimal TotalOwed => CurrentBalance + AccruedInterest + TotalFees;
+    public decimal TotalOwed => CurrentBalance + AccruedInterest + AccruedPenaltyInterest + TotalFees;
     [JsonIgnore]
     public bool IsDelinquent => PaymentsMissed > 0;
 }

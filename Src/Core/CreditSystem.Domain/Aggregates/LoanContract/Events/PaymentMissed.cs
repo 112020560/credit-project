@@ -10,4 +10,5 @@ public record PaymentMissed : DomainEvent
     public Money AmountDue { get; init; }
     public int DaysOverdue { get; init; }
     public Money LateFeeApplied { get; init; }
+    public Money PenaltyInterestAccrued { get; init; }
 }

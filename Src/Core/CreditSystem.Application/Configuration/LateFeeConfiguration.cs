@@ -6,5 +6,5 @@ public class LateFeeConfiguration
     public decimal FixedAmount { get; set; } = 25.0m;         // $25 minimum
     public decimal DailyAmount { get; set; } = 1.0m;          // $1 per day
     public decimal MaximumFee { get; set; } = 100.0m;         // $100 cap
-    public int GracePeriodDays { get; set; } = 5;             // 5-day grace period
+    // GracePeriodDays moved to UnderwritingPolicy.GracePeriodDays
 }

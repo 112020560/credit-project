@@ -11,7 +11,9 @@ public record LoanContractState
     public Money Principal { get; init; }
     public Money CurrentBalance { get; init; }
     public Money AccruedInterest { get; init; }
+    public Money AccruedPenaltyInterest { get; init; }
     public Money TotalFees { get; init; }
+    public Money OriginationFee { get; init; }
     public InterestRate InterestRate { get; init; }
     public int TermMonths { get; init; }
     public PaymentSchedule Schedule { get; init; }
@@ -26,7 +28,7 @@ public record LoanContractState
     public DateTime? LastInterestAccrualDate { get; init; }
     public AmortizationMethod AmortizationMethod { get; init; }
 
-    public Money TotalOwed => CurrentBalance + AccruedInterest + TotalFees;
+    public Money TotalOwed => CurrentBalance + AccruedInterest + AccruedPenaltyInterest + TotalFees;
     public bool IsDelinquent => PaymentsMissed > 0;
     public bool IsActive => Status == ContractStatus.Active;
 
@@ -35,7 +37,9 @@ public record LoanContractState
         Status = ContractStatus.Draft,
         CurrentBalance = Money.Zero(),
         AccruedInterest = Money.Zero(),
+        AccruedPenaltyInterest = Money.Zero(),
         TotalFees = Money.Zero(),
+        OriginationFee = Money.Zero(),
         PaymentsMade = 0,
         PaymentsMissed = 0,
         Version = 0

@@ -148,6 +148,9 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
         var principal = new Money(request.Amount, request.Currency);
         var interestRate = new InterestRate(evaluation.InterestRate);
 
+        var effectiveOriginationFeeRate = product.OriginationFeeRate ?? _policy.OriginationFeeRate;
+        var originationFee = new Money(request.Amount * effectiveOriginationFeeRate / 100m, request.Currency);
+
         var aggregate = LoanContractAggregate.Create(
             customerId: customer.Id,  // ID local, no el del CRM
             principal: principal,
@@ -160,7 +163,8 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
                 ["ExternalCustomerId"] = request.ExternalCustomerId,
                 ["CollateralValue"] = effectiveCollateral?.Amount ?? 0,
                 ["EvaluationResults"] = evaluation.Results
-            }
+            },
+            originationFee: originationFee
         );
 
         var events = aggregate.UncommittedEvents.ToList();

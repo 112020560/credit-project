@@ -30,15 +30,16 @@ public class LoanContractAggregate
         int termMonths,
         AmortizationMethod amortizationMethod,
         IAmortizationCalculator calculator,
-        Dictionary<string, object> evaluationMetadata)
+        Dictionary<string, object> evaluationMetadata,
+        Money? originationFee = null)
     {
         var aggregate = new LoanContractAggregate();
         var id = Guid.NewGuid();
-        //var schedule = PaymentSchedule.Calculate(principal, rate, termMonths, DateTime.UtcNow);
-        
+
         aggregate.Id = id;
 
         var schedule = calculator.Calculate(principal, rate, termMonths, DateTime.UtcNow);
+        var fee = originationFee ?? Money.Zero(principal.Currency);
 
         aggregate.Apply(new ContractCreated
         {
@@ -49,6 +50,7 @@ public class LoanContractAggregate
             TermMonths = termMonths,
             AmortizationMethod = amortizationMethod,
             Schedule = schedule,
+            OriginationFee = fee,
             EvaluationMetadata = evaluationMetadata
         }, isNew: true);
 
@@ -109,9 +111,10 @@ public class LoanContractAggregate
         if (amount.Currency != State.Principal.Currency)
             throw new DomainException($"Currency mismatch: expected {State.Principal.Currency}, got {amount.Currency}");
 
-        // Apply in order: fees -> interest -> principal
+        // Apply in order: fees -> penalty interest -> regular interest -> principal
         var remainingAmount = amount;
         var feePaid = Money.Zero();
+        var penaltyInterestPaid = Money.Zero();
         var interestPaid = Money.Zero();
         var principalPaid = Money.Zero();
 
@@ -119,6 +122,12 @@ public class LoanContractAggregate
         {
             feePaid = remainingAmount > State.TotalFees ? State.TotalFees : remainingAmount;
             remainingAmount = remainingAmount - feePaid;
+        }
+
+        if (remainingAmount.Amount > 0 && State.AccruedPenaltyInterest.Amount > 0)
+        {
+            penaltyInterestPaid = remainingAmount > State.AccruedPenaltyInterest ? State.AccruedPenaltyInterest : remainingAmount;
+            remainingAmount = remainingAmount - penaltyInterestPaid;
         }
 
         if (remainingAmount.Amount > 0 && State.AccruedInterest.Amount > 0)
@@ -141,6 +150,7 @@ public class LoanContractAggregate
             TotalAmount = amount,
             PrincipalPaid = principalPaid,
             InterestPaid = interestPaid,
+            PenaltyInterestPaid = penaltyInterestPaid,
             FeePaid = feePaid,
             NewBalance = newBalance,
             PaymentNumber = State.PaymentsMade + 1,
@@ -162,10 +172,10 @@ public class LoanContractAggregate
         }
     }
 
-    public void RecordMissedPayment(int paymentNumber, DateTime dueDate, Money lateFee, int autoDefaultThresholdDays = 90)
+    public void RecordMissedPayment(int paymentNumber, DateTime dueDate, Money lateFee, int autoDefaultThresholdDays = 90, Money? penaltyInterest = null)
     {
         EnsureStatus(ContractStatus.Active, ContractStatus.Delinquent);
-        
+
         if (State.Status != ContractStatus.Active && State.Status != ContractStatus.Delinquent)
             throw new DomainException($"Cannot record missed payment: loan status is {State.Status}");
 
@@ -178,6 +188,7 @@ public class LoanContractAggregate
 
         var amountDue = scheduledPayment?.TotalPayment ?? Money.Zero(State.Principal.Currency);
         var daysOverdue = (int)(DateTime.UtcNow.Date - dueDate.Date).TotalDays;
+        var penalty = penaltyInterest ?? Money.Zero(State.Principal.Currency);
 
         Apply(new PaymentMissed
         {
@@ -186,7 +197,8 @@ public class LoanContractAggregate
             DueDate = dueDate,
             AmountDue = amountDue,
             DaysOverdue = daysOverdue,
-            LateFeeApplied = lateFee
+            LateFeeApplied = lateFee,
+            PenaltyInterestAccrued = penalty
         }, isNew: true);
 
         if (daysOverdue >= autoDefaultThresholdDays)
@@ -284,6 +296,9 @@ public class LoanContractAggregate
                 TermMonths = e.TermMonths,
                 AmortizationMethod = e.AmortizationMethod,
                 Schedule = e.Schedule,
+                TotalFees = e.OriginationFee,
+                OriginationFee = e.OriginationFee,
+                AccruedPenaltyInterest = Money.Zero(e.Principal.Currency),
                 Status = ContractStatus.Approved,
                 NextPaymentDue = e.Schedule.Entries.FirstOrDefault()?.DueDate,
                 Version = state.Version + 1
@@ -309,6 +324,7 @@ public class LoanContractAggregate
             {
                 CurrentBalance = e.NewBalance,
                 AccruedInterest = state.AccruedInterest - e.InterestPaid,
+                AccruedPenaltyInterest = state.AccruedPenaltyInterest - e.PenaltyInterestPaid,
                 TotalFees = state.TotalFees - e.FeePaid,
                 PaymentsMade = state.PaymentsMade + 1,
                 LastPaymentDate = DateTime.UtcNow,
@@ -324,6 +340,7 @@ public class LoanContractAggregate
             {
                 PaymentsMissed = state.PaymentsMissed + 1,
                 TotalFees = state.TotalFees + e.LateFeeApplied,
+                AccruedPenaltyInterest = state.AccruedPenaltyInterest + e.PenaltyInterestAccrued,
                 Status = ContractStatus.Delinquent,
                 Version = state.Version + 1
             },
@@ -341,8 +358,9 @@ public class LoanContractAggregate
                 TermMonths = e.NewTermMonths,
                 Schedule = e.NewSchedule,
                 CurrentBalance = state.CurrentBalance - e.ForgiveAmount,
-                Status = ContractStatus.Active, // Reinstated to active after restructure
-                PaymentsMissed = 0, // Reset de pagos perdidos
+                Status = ContractStatus.Active,
+                PaymentsMissed = 0,
+                AccruedPenaltyInterest = Money.Zero(state.Principal.Currency),
                 NextPaymentDue = e.NewSchedule.Entries.FirstOrDefault()?.DueDate,
                 Version = state.Version + 1
             },
@@ -352,6 +370,7 @@ public class LoanContractAggregate
                 Status = ContractStatus.PaidOff,
                 CurrentBalance = Money.Zero(),
                 AccruedInterest = Money.Zero(),
+                AccruedPenaltyInterest = Money.Zero(),
                 PaidOffAt = e.PaidOffAt,
                 Version = state.Version + 1
             },

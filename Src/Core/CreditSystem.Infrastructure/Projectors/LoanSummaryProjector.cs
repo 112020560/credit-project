@@ -71,7 +71,9 @@ public class LoanSummaryProjector : IProjection
             Principal = e.Principal.Amount,
             CurrentBalance = e.Principal.Amount,
             AccruedInterest = 0,
-            TotalFees = 0,
+            TotalFees = e.OriginationFee.Amount,
+            OriginationFee = e.OriginationFee.Amount,
+            AccruedPenaltyInterest = 0,
             InterestRate = e.InterestRate.AnnualRate,
             TermMonths = e.TermMonths,
             Status = "Approved",
@@ -131,9 +133,10 @@ public class LoanSummaryProjector : IProjection
     private async Task HandlePaymentApplied(PaymentApplied e, CancellationToken ct)
     {
         const string sql = @"
-            UPDATE rm_loan_summaries 
+            UPDATE rm_loan_summaries
             SET current_balance = @NewBalance,
                 accrued_interest = accrued_interest - @InterestPaid,
+                accrued_penalty_interest = accrued_penalty_interest - @PenaltyInterestPaid,
                 total_fees = total_fees - @FeesPaid,
                 payments_made = @PaymentNumber,
                 last_payment_at = @Now,
@@ -146,6 +149,7 @@ public class LoanSummaryProjector : IProjection
             LoanId = e.AggregateId,
             NewBalance = e.NewBalance.Amount,
             InterestPaid = e.InterestPaid.Amount,
+            PenaltyInterestPaid = e.PenaltyInterestPaid.Amount,
             FeesPaid = e.FeePaid.Amount,
             PaymentNumber = e.PaymentNumber,
             Version = e.Version,
@@ -156,9 +160,10 @@ public class LoanSummaryProjector : IProjection
     private async Task HandlePaymentMissed(PaymentMissed e, CancellationToken ct)
     {
         const string sql = @"
-            UPDATE rm_loan_summaries 
+            UPDATE rm_loan_summaries
             SET payments_missed = payments_missed + 1,
                 total_fees = total_fees + @LateFee,
+                accrued_penalty_interest = accrued_penalty_interest + @PenaltyInterestAccrued,
                 status = 'Delinquent',
                 version = @Version,
                 updated_at = @Now
@@ -168,6 +173,7 @@ public class LoanSummaryProjector : IProjection
         {
             LoanId = e.AggregateId,
             LateFee = e.LateFeeApplied.Amount,
+            PenaltyInterestAccrued = e.PenaltyInterestAccrued.Amount,
             Version = e.Version,
             Now = DateTime.UtcNow
         }, ct);

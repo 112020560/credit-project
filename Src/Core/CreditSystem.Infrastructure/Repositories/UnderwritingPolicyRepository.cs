@@ -19,7 +19,8 @@ public class UnderwritingPolicyRepository : IUnderwritingPolicyRepository
     {
         const string sql = """
             SELECT base_interest_rate, auto_default_threshold_days, no_score_behavior,
-                   shares_multiplier_limit, require_active_membership
+                   shares_multiplier_limit, require_active_membership,
+                   grace_period_days, penalty_rate, origination_fee_rate
             FROM underwriting_policies
             WHERE id = 'default'
             """;
@@ -30,7 +31,10 @@ public class UnderwritingPolicyRepository : IUnderwritingPolicyRepository
             int AutoDefaultThresholdDays,
             string NoScoreBehavior,
             int SharesMultiplierLimit,
-            bool RequireActiveMembership)>(sql);
+            bool RequireActiveMembership,
+            int GracePeriodDays,
+            decimal PenaltyRate,
+            decimal OriginationFeeRate)>(sql);
 
         var noScoreBehavior = row.NoScoreBehavior switch
         {
@@ -43,6 +47,9 @@ public class UnderwritingPolicyRepository : IUnderwritingPolicyRepository
             row.AutoDefaultThresholdDays,
             noScoreBehavior,
             row.SharesMultiplierLimit,
-            row.RequireActiveMembership);
+            row.RequireActiveMembership,
+            row.GracePeriodDays,
+            row.PenaltyRate,
+            row.OriginationFeeRate);
     }
 }

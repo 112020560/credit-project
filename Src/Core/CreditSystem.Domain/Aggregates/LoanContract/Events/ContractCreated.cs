@@ -12,5 +12,6 @@ public record ContractCreated : DomainEvent
     public int TermMonths { get; init; }
     public AmortizationMethod AmortizationMethod { get; init; }
     public PaymentSchedule Schedule { get; init; }
+    public Money OriginationFee { get; init; }
     public Dictionary<string, object> EvaluationMetadata { get; init; }
 }

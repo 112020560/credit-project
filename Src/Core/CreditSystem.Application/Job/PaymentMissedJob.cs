@@ -78,7 +78,25 @@ public class PaymentMissedJob : IPaymentMissedJob
             return;
         }
 
+        // Grace period guard: skip if not yet past the grace window
+        if (loan.DaysOverdue <= _policy.GracePeriodDays)
+        {
+            _logger.LogDebug(
+                "Loan {LoanId} is within grace period ({DaysOverdue} days overdue, grace = {Grace}). Skipping.",
+                loan.LoanId, loan.DaysOverdue, _policy.GracePeriodDays);
+            return;
+        }
+
         var lateFee = CalculateLateFee(loan);
+
+        // Penalty interest: principal × (penaltyRate/100/365) × daysOverdue
+        var penaltyInterest = Money.Zero(loan.Currency);
+        if (_policy.PenaltyRate > 0)
+        {
+            var overduePrincipal = aggregate.State.CurrentBalance.Amount;
+            var penaltyAmount = overduePrincipal * (_policy.PenaltyRate / 100m / 365m) * loan.DaysOverdue;
+            penaltyInterest = new Money(penaltyAmount, loan.Currency);
+        }
 
         try
         {
@@ -86,7 +104,8 @@ public class PaymentMissedJob : IPaymentMissedJob
                 loan.PaymentNumber,
                 loan.DueDate,
                 lateFee,
-                _policy.AutoDefaultThresholdDays);
+                _policy.AutoDefaultThresholdDays,
+                penaltyInterest);
         }
         catch (DomainException ex)
         {
@@ -106,11 +125,12 @@ public class PaymentMissedJob : IPaymentMissedJob
         }
 
         _logger.LogInformation(
-            "Recorded missed payment #{PaymentNumber} for loan {LoanId}. Days overdue: {DaysOverdue}, Late fee: {LateFee}",
+            "Recorded missed payment #{PaymentNumber} for loan {LoanId}. Days overdue: {DaysOverdue}, Late fee: {LateFee}, Penalty interest: {PenaltyInterest}",
             loan.PaymentNumber,
             loan.LoanId,
             loan.DaysOverdue,
-            lateFee.Amount);
+            lateFee.Amount,
+            penaltyInterest.Amount);
     }
 
     private Money CalculateLateFee(OverdueLoanInfo loan)

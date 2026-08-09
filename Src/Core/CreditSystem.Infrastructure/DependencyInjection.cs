@@ -112,7 +112,8 @@ public static class DependencyInjection
         services.AddScoped<ILoanQueryService>(sp =>
             new LoanQueryService(
                 connectionString,
-                sp.GetRequiredService<IOptions<LateFeeConfiguration>>()));
+                sp.GetRequiredService<IOptions<LateFeeConfiguration>>(),
+                sp.GetRequiredService<UnderwritingPolicy>()));
 
         services.AddSingleton<IUnderwritingPolicyRepository>(_ =>
             new UnderwritingPolicyRepository(connectionString));

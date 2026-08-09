@@ -1,5 +1,6 @@
 using CreditSystem.Application.Configuration;
 using CreditSystem.Domain.Abstractions.Services;
+using CreditSystem.Domain.Models;
 using CreditSystem.Domain.Models.ReadModels;
 using Dapper;
 using Microsoft.Extensions.Options;
@@ -11,11 +12,13 @@ public class LoanQueryService: ILoanQueryService
 {
     private readonly string _connectionString;
     private readonly LateFeeConfiguration _lateFeeConfig;
+    private readonly UnderwritingPolicy _policy;
 
-    public LoanQueryService(string connectionString, IOptions<LateFeeConfiguration> lateFeeConfig)
+    public LoanQueryService(string connectionString, IOptions<LateFeeConfiguration> lateFeeConfig, UnderwritingPolicy policy)
     {
         _connectionString = connectionString;
         _lateFeeConfig = lateFeeConfig.Value;
+        _policy = policy;
     }
     public async Task<bool> HasActiveLoansAsync(Guid customerId, CancellationToken ct = default)
     {
@@ -33,33 +36,32 @@ public class LoanQueryService: ILoanQueryService
     public async Task<LoanSummaryReadModel?> GetLoanSummaryAsync(Guid loanId, CancellationToken ct = default)
     {
         const string sql = @"
-            select
-                loan_id as LoanId,
-                customer_id as CustomerId,
-                customer_name as CustomerName,
-                principal as Principal,
-                current_balance as CurrentBalance,
-                accrued_interest as AccruedInterest,
-                total_fees as TotalFees,
-                interest_rate as InterestRate,
-                term_months as TermMonths,
-                status as Status,
-                payments_made as PaymentsMade,
-                payments_missed as PaymentsMissed,
-                next_payment_date as NextPaymentDate,
-                next_payment_amount as NextPaymentAmount,
-                disbursed_at as DisbursedAt,
-                created_at as CreatedAt,
-                last_payment_at as LastPaymentAt,
-                defaulted_at as DefaultedAt,
-                paid_off_at as PaidOffAt,
-                version as Version,
-                updated_at as UpdatedAt,
-                last_interest_accrual_date
-            from
-                rm_loan_summaries 
-            WHERE loan_id = @LoanId
-        ";
+            SELECT
+                loan_id               AS LoanId,
+                customer_id           AS CustomerId,
+                customer_name         AS CustomerName,
+                principal             AS Principal,
+                current_balance       AS CurrentBalance,
+                accrued_interest      AS AccruedInterest,
+                total_fees            AS TotalFees,
+                origination_fee       AS OriginationFee,
+                accrued_penalty_interest AS AccruedPenaltyInterest,
+                interest_rate         AS InterestRate,
+                term_months           AS TermMonths,
+                status                AS Status,
+                payments_made         AS PaymentsMade,
+                payments_missed       AS PaymentsMissed,
+                next_payment_date     AS NextPaymentDate,
+                next_payment_amount   AS NextPaymentAmount,
+                disbursed_at          AS DisbursedAt,
+                created_at            AS CreatedAt,
+                last_payment_at       AS LastPaymentAt,
+                defaulted_at          AS DefaultedAt,
+                paid_off_at           AS PaidOffAt,
+                version               AS Version,
+                updated_at            AS UpdatedAt
+            FROM rm_loan_summaries
+            WHERE loan_id = @LoanId";
         
         await using var connection = new NpgsqlConnection(_connectionString);
         return await connection.QuerySingleOrDefaultAsync<LoanSummaryReadModel>(sql, new { LoanId = loanId });
@@ -68,8 +70,32 @@ public class LoanQueryService: ILoanQueryService
     public async Task<IReadOnlyList<LoanSummaryReadModel>> GetCustomerLoansAsync(Guid customerId, CancellationToken ct = default)
     {
         const string sql = @"
-            SELECT * FROM rm_loan_summaries 
-            WHERE customer_id = @CustomerId 
+            SELECT
+                loan_id               AS LoanId,
+                customer_id           AS CustomerId,
+                customer_name         AS CustomerName,
+                principal             AS Principal,
+                current_balance       AS CurrentBalance,
+                accrued_interest      AS AccruedInterest,
+                total_fees            AS TotalFees,
+                origination_fee       AS OriginationFee,
+                accrued_penalty_interest AS AccruedPenaltyInterest,
+                interest_rate         AS InterestRate,
+                term_months           AS TermMonths,
+                status                AS Status,
+                payments_made         AS PaymentsMade,
+                payments_missed       AS PaymentsMissed,
+                next_payment_date     AS NextPaymentDate,
+                next_payment_amount   AS NextPaymentAmount,
+                disbursed_at          AS DisbursedAt,
+                created_at            AS CreatedAt,
+                last_payment_at       AS LastPaymentAt,
+                defaulted_at          AS DefaultedAt,
+                paid_off_at           AS PaidOffAt,
+                version               AS Version,
+                updated_at            AS UpdatedAt
+            FROM rm_loan_summaries
+            WHERE customer_id = @CustomerId
             ORDER BY created_at DESC";
         
         await using var connection = new NpgsqlConnection(_connectionString);
@@ -82,7 +108,27 @@ public class LoanQueryService: ILoanQueryService
         string? collectionStatus = null,
         CancellationToken ct = default)
     {
-        var sql = "SELECT * FROM rm_delinquent_loans WHERE 1=1";
+        var sql = @"
+            SELECT
+                loan_id              AS LoanId,
+                customer_id          AS CustomerId,
+                customer_name        AS CustomerName,
+                customer_phone       AS CustomerPhone,
+                customer_email       AS CustomerEmail,
+                principal            AS Principal,
+                current_balance      AS CurrentBalance,
+                total_owed           AS TotalOwed,
+                days_overdue         AS DaysOverdue,
+                payments_missed      AS PaymentsMissed,
+                last_payment_at      AS LastPaymentAt,
+                next_action_date     AS NextActionDate,
+                collection_status    AS CollectionStatus,
+                assigned_collector   AS AssignedCollector,
+                notes                AS Notes,
+                created_at           AS CreatedAt,
+                updated_at           AS UpdatedAt
+            FROM rm_delinquent_loans
+            WHERE 1=1";
         var parameters = new DynamicParameters();
 
         if (minDaysOverdue.HasValue)
@@ -110,8 +156,20 @@ public class LoanQueryService: ILoanQueryService
         CancellationToken ct = default)
     {
         const string sql = @"
-            SELECT * FROM rm_payment_history 
-            WHERE loan_id = @LoanId 
+            SELECT
+                id             AS Id,
+                loan_id        AS LoanId,
+                payment_number AS PaymentNumber,
+                payment_date   AS PaymentDate,
+                total_amount   AS TotalAmount,
+                principal_paid AS PrincipalPaid,
+                interest_paid  AS InterestPaid,
+                fees_paid      AS FeesPaid,
+                balance_after  AS BalanceAfter,
+                payment_method AS PaymentMethod,
+                status         AS Status
+            FROM rm_payment_history
+            WHERE loan_id = @LoanId
             ORDER BY payment_date DESC";
         
         await using var connection = new NpgsqlConnection(_connectionString);
@@ -121,7 +179,26 @@ public class LoanQueryService: ILoanQueryService
 
     public async Task<LoanPortfolioReadModel?> GetPortfolioSummaryAsync(CancellationToken ct = default)
     {
-        const string sql = "SELECT * FROM rm_loan_portfolio WHERE id = 'global'";
+        const string sql = @"
+            SELECT
+                id                        AS Id,
+                total_loans               AS TotalLoans,
+                active_loans              AS ActiveLoans,
+                delinquent_loans          AS DelinquentLoans,
+                defaulted_loans           AS DefaultedLoans,
+                paid_off_loans            AS PaidOffLoans,
+                total_principal           AS TotalPrincipal,
+                total_outstanding         AS TotalOutstanding,
+                total_interest_accrued    AS TotalInterestAccrued,
+                total_collected_principal AS TotalCollectedPrincipal,
+                total_collected_interest  AS TotalCollectedInterest,
+                total_collected_fees      AS TotalCollectedFees,
+                average_interest_rate     AS AverageInterestRate,
+                delinquency_rate          AS DelinquencyRate,
+                default_rate              AS DefaultRate,
+                updated_at                AS UpdatedAt
+            FROM rm_loan_portfolio
+            WHERE id = 'global'";
         
         await using var connection = new NpgsqlConnection(_connectionString);
         return await connection.QuerySingleOrDefaultAsync<LoanPortfolioReadModel>(sql);
@@ -133,7 +210,21 @@ public class LoanQueryService: ILoanQueryService
         CancellationToken ct = default)
     {
         const string sql = @"
-            SELECT * FROM rm_upcoming_payments 
+            SELECT
+                id             AS Id,
+                loan_id        AS LoanId,
+                customer_id    AS CustomerId,
+                customer_name  AS CustomerName,
+                customer_email AS CustomerEmail,
+                payment_number AS PaymentNumber,
+                due_date       AS DueDate,
+                amount_due     AS AmountDue,
+                principal_due  AS PrincipalDue,
+                interest_due   AS InterestDue,
+                is_overdue     AS IsOverdue,
+                days_until_due AS DaysUntilDue,
+                reminder_sent  AS ReminderSent
+            FROM rm_upcoming_payments
             WHERE due_date BETWEEN @FromDate AND @ToDate
             ORDER BY due_date ASC";
         
@@ -185,8 +276,8 @@ public class LoanQueryService: ILoanQueryService
 
         await using var connection = new NpgsqlConnection(_connectionString);
 
-        // Calcular fecha de corte usando grace period de configuración
-        var cutoffDate = DateTime.UtcNow.Date.AddDays(-_lateFeeConfig.GracePeriodDays);
+        // Calcular fecha de corte usando grace period de la política de suscripción
+        var cutoffDate = DateTime.UtcNow.Date.AddDays(-_policy.GracePeriodDays);
 
         var results = await connection.QueryAsync<OverdueLoanInfo>(
             sql, new { CutoffDate = cutoffDate });

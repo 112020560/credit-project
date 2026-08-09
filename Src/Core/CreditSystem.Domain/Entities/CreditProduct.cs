@@ -12,6 +12,8 @@ public class CreditProduct
     public AmortizationMethod DefaultAmortizationMethod { get; private set; }
     public bool RequiresCollateral { get; private set; }
     public ProductStatus Status { get; private set; }
+    public decimal? PenaltyRate { get; private set; }
+    public decimal? OriginationFeeRate { get; private set; }
 
     public CreditProduct(
         Guid id,
@@ -20,7 +22,9 @@ public class CreditProduct
         ProductRates rates,
         AmortizationMethod defaultAmortizationMethod,
         bool requiresCollateral,
-        ProductStatus status = ProductStatus.Active)
+        ProductStatus status = ProductStatus.Active,
+        decimal? penaltyRate = null,
+        decimal? originationFeeRate = null)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Product name cannot be empty", nameof(name));
@@ -32,5 +36,7 @@ public class CreditProduct
         DefaultAmortizationMethod = defaultAmortizationMethod;
         RequiresCollateral = requiresCollateral;
         Status = status;
+        PenaltyRate = penaltyRate;
+        OriginationFeeRate = originationFeeRate;
     }
 }
