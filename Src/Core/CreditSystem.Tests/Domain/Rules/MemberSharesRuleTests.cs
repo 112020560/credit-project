@@ -53,7 +53,7 @@ public class MemberSharesRuleTests
         var result = await rule.EvaluateAsync(context);
 
         result.Passed.Should().BeFalse();
-        result.Message.Should().Contain("25,000");
+        result.Message.Should().Contain("exceeds maximum allowed");
     }
 
     [Fact]

@@ -3,6 +3,7 @@ using CreditSystem.Domain.Abstractions.Projections;
 using CreditSystem.Domain.Abstractions.Repositories;
 using CreditSystem.Domain.Abstractions.Services;
 using CreditSystem.Domain.Aggregates.LoanContract;
+using CreditSystem.Domain.Enums;
 using CreditSystem.Domain.Models;
 using CreditSystem.Domain.Rules;
 using CreditSystem.Domain.Services.Amortization;
@@ -17,6 +18,7 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
     private readonly ILoanContractRepository _repository;
     private readonly ICustomerReadRepository _customerService;
     private readonly ICooperativeMemberRepository _memberRepository;
+    private readonly ICreditProductRepository _productRepository;
     private readonly ILoanQueryService _queryService;
     private readonly ContractEngine _contractEngine;
     private readonly UnderwritingPolicy _policy;
@@ -28,6 +30,7 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
         ILoanContractRepository repository,
         ICustomerReadRepository customerService,
         ICooperativeMemberRepository memberRepository,
+        ICreditProductRepository productRepository,
         ILoanQueryService queryService,
         ContractEngine contractEngine,
         UnderwritingPolicy policy,
@@ -38,6 +41,7 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
         _repository = repository;
         _customerService = customerService;
         _memberRepository = memberRepository;
+        _productRepository = productRepository;
         _queryService = queryService;
         _contractEngine = contractEngine;
         _policy = policy;
@@ -51,13 +55,28 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
         CancellationToken cancellationToken)
     {
         var customer = await _customerService.GetByExternalIdAsync(
-            request.ExternalCustomerId, 
+            request.ExternalCustomerId,
             cancellationToken);
 
         if (customer == null)
         {
             _logger.LogWarning("Customer not found for external ID {ExternalId}", request.ExternalCustomerId);
             return CreateContractResponse.Failed($"Customer with external ID {request.ExternalCustomerId} not found");
+        }
+
+        // Resolver producto de crédito
+        var product = await _productRepository.GetByIdAsync(request.ProductId, cancellationToken);
+
+        if (product == null)
+        {
+            _logger.LogWarning("Credit product not found: {ProductId}", request.ProductId);
+            return CreateContractResponse.Failed("Credit product not found");
+        }
+
+        if (product.Status != ProductStatus.Active)
+        {
+            _logger.LogWarning("Credit product {ProductId} is not active", request.ProductId);
+            return CreateContractResponse.Failed("Credit product is not active");
         }
 
         // Resolver membresía cooperativa
@@ -83,10 +102,12 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
             MonthlyDebt = customer.MonthlyDebt.HasValue ? new Money(customer.MonthlyDebt.Value, request.Currency) : null,
             HasActiveLoans = hasActiveLoans,
             MemberSharesAmount = member?.State.Shares.TotalAmount,
-            IsActiveMember = member != null ? member.State.Status == Domain.Enums.MemberStatus.Active : null
+            IsActiveMember = member != null ? member.State.Status == MemberStatus.Active : null,
+            Product = product
         };
 
-        var evaluation = await _contractEngine.EvaluateAsync(evaluationContext, cancellationToken);
+        var effectiveBaseRate = product.Rates.BaseInterestRate ?? _policy.BaseInterestRate;
+        var evaluation = await _contractEngine.EvaluateAsync(evaluationContext, effectiveBaseRate, cancellationToken);
 
         foreach (var result in evaluation.Results)
         {

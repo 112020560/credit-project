@@ -15,8 +15,10 @@ public class ContractEngine
 
     public async Task<ContractEvaluationResponse> EvaluateAsync(
         ContractEvaluationContext context,
+        decimal? baseInterestRate = null,
         CancellationToken ct = default)
     {
+        var effectiveBaseRate = baseInterestRate ?? _policy.BaseInterestRate;
         var results = new List<RuleEvaluationResult>();
         var approved = true;
         var rateAdjustment = 0m;
@@ -49,7 +51,7 @@ public class ContractEngine
             }
         }
 
-        var finalRate = _policy.BaseInterestRate + rateAdjustment;
+        var finalRate = effectiveBaseRate + rateAdjustment;
 
         return approved
             ? ContractEvaluationResponse.Approve(finalRate, results)

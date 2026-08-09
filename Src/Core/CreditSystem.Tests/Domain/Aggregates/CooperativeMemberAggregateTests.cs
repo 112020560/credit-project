@@ -176,7 +176,7 @@ public class CooperativeMemberAggregateTests
         var original = CreateActiveMember(sharesAmount: 7500m);
         var state = original.State with { Id = Guid.NewGuid() };
 
-        var rehydrated = new CooperativeMemberAggregate(state, Enumerable.Empty<Domain.Abstractions.Events.IDomainEvent>());
+        var rehydrated = new CooperativeMemberAggregate(state, Enumerable.Empty<CreditSystem.Domain.Abstractions.Events.IDomainEvent>());
 
         rehydrated.State.Status.Should().Be(MemberStatus.Active);
         rehydrated.State.Shares.TotalAmount.Amount.Should().Be(7500m);

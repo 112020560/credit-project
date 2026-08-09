@@ -63,7 +63,7 @@ public class CreateCreditLineCommandHandler : IRequestHandler<CreateCreditLineCo
                 MonthlyDebt = customer.MonthlyDebt.HasValue ? new Money(customer.MonthlyDebt.Value, request.Currency) : null
             };
 
-            var evaluation = await _contractEngine.EvaluateAsync(context, cancellationToken);
+            var evaluation = await _contractEngine.EvaluateAsync(context, ct: cancellationToken);
 
             if (!evaluation.Approved)
             {

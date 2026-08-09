@@ -12,11 +12,13 @@ public class CreateContractCommandValidator : AbstractValidator<CreateContractCo
             .NotEmpty()
             .WithMessage("Customer ID is required");
 
+        RuleFor(x => x.ProductId)
+            .NotEmpty()
+            .WithMessage("Product ID is required");
+
         RuleFor(x => x.Amount)
             .GreaterThan(0)
-            .WithMessage("Amount must be greater than zero")
-            .LessThanOrEqualTo(1_000_000)
-            .WithMessage("Amount cannot exceed 1,000,000");
+            .WithMessage("Amount must be greater than zero");
 
         RuleFor(x => x.Currency)
             .NotEmpty()

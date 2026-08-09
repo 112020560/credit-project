@@ -123,6 +123,9 @@ public static class DependencyInjection
               .GetAwaiter()
               .GetResult());
 
+        services.AddScoped<ICreditProductRepository>(sp =>
+            new CreditProductRepository(connectionString));
+
         return services;
     }
 

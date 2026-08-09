@@ -15,4 +15,5 @@ public record ContractEvaluationContext
     public bool? HasActiveLoans { get; init; }
     public Money? MemberSharesAmount { get; init; }
     public bool? IsActiveMember { get; init; }
+    public CreditProduct? Product { get; init; }
 }
