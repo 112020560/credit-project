@@ -24,4 +24,6 @@ public interface ILoanQueryService
         DateTime? toDate = null,
         bool? earlyPayoffOnly = null,
         CancellationToken ct = default);
+
+    Task<IReadOnlyList<LoanRiskInfo>> GetLoansForRiskClassificationAsync(CancellationToken ct = default);
 }

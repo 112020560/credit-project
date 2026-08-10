@@ -1,6 +1,7 @@
 ﻿using CreditSystem.Application.Behaviors;
 using CreditSystem.Application.Configuration;
 using CreditSystem.Application.Job;
+using CreditSystem.Domain.Services;
 using FluentValidation;
 using MediatR;
 using Microsoft.Extensions.Configuration;
@@ -41,6 +42,8 @@ public static class DependencyInjection
         services.AddScoped<IRevolvingInterestAccrualJob, RevolvingInterestAccrualJob>();
         services.AddScoped<IStatementGenerationJob, StatementGenerationJob>();
         services.AddScoped<IRevolvingPaymentMissedJob, RevolvingPaymentMissedJob>();
+        services.AddScoped<IRiskClassificationJob, RiskClassificationJob>();
+        services.AddScoped<RiskClassificationService>();
         return services;
     }
 

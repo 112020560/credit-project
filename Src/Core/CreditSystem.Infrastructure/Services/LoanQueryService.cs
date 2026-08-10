@@ -59,7 +59,9 @@ public class LoanQueryService: ILoanQueryService
                 defaulted_at          AS DefaultedAt,
                 paid_off_at           AS PaidOffAt,
                 version               AS Version,
-                updated_at            AS UpdatedAt
+                updated_at            AS UpdatedAt,
+                risk_category         AS RiskCategory,
+                estimated_provision   AS EstimatedProvision
             FROM rm_loan_summaries
             WHERE loan_id = @LoanId";
         
@@ -93,7 +95,9 @@ public class LoanQueryService: ILoanQueryService
                 defaulted_at          AS DefaultedAt,
                 paid_off_at           AS PaidOffAt,
                 version               AS Version,
-                updated_at            AS UpdatedAt
+                updated_at            AS UpdatedAt,
+                risk_category         AS RiskCategory,
+                estimated_provision   AS EstimatedProvision
             FROM rm_loan_summaries
             WHERE customer_id = @CustomerId
             ORDER BY created_at DESC";
@@ -376,6 +380,24 @@ public class LoanQueryService: ILoanQueryService
         await using var connection = new NpgsqlConnection(_connectionString);
         var results = await connection.QueryAsync<PaidOffLoanReadModel>(sql, parameters);
 
+        return results.ToList().AsReadOnly();
+    }
+
+    public async Task<IReadOnlyList<LoanRiskInfo>> GetLoansForRiskClassificationAsync(CancellationToken ct = default)
+    {
+        const string sql = @"
+            SELECT
+                loan_id                                                  AS LoanId,
+                current_balance                                          AS CurrentBalance,
+                GREATEST(0, EXTRACT(DAY FROM NOW() - next_payment_date)::INT) AS DaysOverdue,
+                risk_category                                            AS CurrentRiskCategory
+            FROM rm_loan_summaries
+            WHERE status IN ('Active', 'Delinquent', 'Default')
+            AND next_payment_date IS NOT NULL
+            AND current_balance > 0";
+
+        await using var connection = new NpgsqlConnection(_connectionString);
+        var results = await connection.QueryAsync<LoanRiskInfo>(sql);
         return results.ToList().AsReadOnly();
     }
 }

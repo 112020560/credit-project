@@ -82,6 +82,7 @@ v1.MapDelinquentLoansEndpoints();
 v1.MapRevolvingCreditEndpoints();
 v1.MapPaymentsEndpoints();
 v1.MapWebhooksEndpoints();
+v1.MapRiskEndpoints();
 
 app.UseHttpsRedirection();
 

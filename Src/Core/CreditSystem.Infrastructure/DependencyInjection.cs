@@ -130,6 +130,9 @@ public static class DependencyInjection
         services.AddScoped<ILoanGuaranteeRepository>(sp =>
             new LoanGuaranteeRepository(connectionString));
 
+        services.AddScoped<IRiskClassificationRepository>(sp =>
+            new RiskClassificationRepository(connectionString));
+
         return services;
     }
 
@@ -145,6 +148,9 @@ public static class DependencyInjection
         // Async payment workers
         services.AddHostedService<OutboxPublisherWorker>();
         services.AddHostedService<WebhookDeliveryWorker>();
+
+        // Risk classification worker
+        services.AddHostedService<RiskClassificationWorker>();
 
         return services;
     }

@@ -27,6 +27,8 @@ public class LoanSummaryReadModel
     public DateTime? PaidOffAt { get; set; }
     public int Version { get; set; }
     public DateTime UpdatedAt { get; set; }
+    public string? RiskCategory { get; set; }
+    public decimal EstimatedProvision { get; set; }
 
     // Computed
     [JsonIgnore]
