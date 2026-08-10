@@ -16,9 +16,11 @@ using CreditSystem.Application.Queries.GetRestructureHistory;
 
 using CreditSystem.Domain.Abstractions.Repositories;
 using CreditSystem.Domain.Abstractions.Services;
+using CreditSystem.Domain.Models;
 using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using System.Text.Json;
 
 namespace CreditSystem.Api.EndPoints;
 
@@ -148,8 +150,10 @@ public static class LoanContractEndpoints
             .Produces(StatusCodes.Status404NotFound);
     }
     private static async Task<IResult> CreateContract(
+        HttpContext httpContext,
         [FromBody] CreateContractCommand command,
         [FromServices] IMediator mediator,
+        [FromServices] IAuditLogRepository auditLogRepository,
         CancellationToken cancellationToken)
     {
         try
@@ -167,6 +171,16 @@ public static class LoanContractEndpoints
                 });
             }
 
+            var userId = httpContext.Request.Headers.TryGetValue("X-User-Id", out var uid) ? uid.ToString() : null;
+            await auditLogRepository.LogAsync(new AuditEntry
+            {
+                Action = "contract.created",
+                EntityType = "LoanContract",
+                EntityId = response.ContractId ?? Guid.Empty,
+                UserId = userId,
+                Details = new { command.Amount, command.Currency }
+            }, cancellationToken);
+
             return Results.Created($"/api/loans/{response.ContractId}", response);
         }
         catch (ValidationException ex)
@@ -183,8 +197,10 @@ public static class LoanContractEndpoints
 
     private static async Task<IResult> DisburseLoan(
         Guid id,
+        HttpContext httpContext,
         [FromBody] DisburseLoanRequest request,
         [FromServices] IMediator mediator,
+        [FromServices] IAuditLogRepository auditLogRepository,
         CancellationToken cancellationToken)
     {
         try
@@ -208,6 +224,16 @@ public static class LoanContractEndpoints
                     Extensions = { ["errors"] = response.Errors }
                 });
             }
+
+            var userId = httpContext.Request.Headers.TryGetValue("X-User-Id", out var uid) ? uid.ToString() : null;
+            await auditLogRepository.LogAsync(new AuditEntry
+            {
+                Action = "contract.disbursed",
+                EntityType = "LoanContract",
+                EntityId = id,
+                UserId = userId,
+                Details = new { request.DisbursementMethod, request.DestinationAccount }
+            }, cancellationToken);
 
             return Results.Ok(response);
         }
@@ -256,10 +282,30 @@ public static class LoanContractEndpoints
 
     private static async Task<IResult> ApplyPayment(
         Guid id,
+        HttpContext httpContext,
         [FromBody] ApplyPaymentRequest request,
         [FromServices] IMediator mediator,
+        [FromServices] IIdempotencyRepository idempotencyRepository,
+        [FromServices] IAuditLogRepository auditLogRepository,
         CancellationToken cancellationToken)
     {
+        // Idempotency check
+        if (httpContext.Request.Headers.TryGetValue("Idempotency-Key", out var rawKey) &&
+            Guid.TryParse(rawKey, out var idempotencyKey))
+        {
+            var existing = await idempotencyRepository.FindAsync(idempotencyKey, cancellationToken);
+            if (existing is not null)
+            {
+                var cached = JsonSerializer.Deserialize<ApplyPaymentResponse>(existing.ResponseBody)!;
+                httpContext.Response.Headers["Idempotency-Replayed"] = "true";
+                return Results.Ok(cached);
+            }
+        }
+        else
+        {
+            idempotencyKey = Guid.Empty;
+        }
+
         try
         {
             var command = new ApplyPaymentCommand
@@ -283,6 +329,29 @@ public static class LoanContractEndpoints
                     Extensions = { ["errors"] = response.Errors }
                 });
             }
+
+            // Store idempotency result
+            if (idempotencyKey != Guid.Empty)
+            {
+                await idempotencyRepository.SaveAsync(new IdempotencyRecord
+                {
+                    Key = idempotencyKey,
+                    ResponseStatus = 200,
+                    ResponseBody = JsonSerializer.Serialize(response),
+                    ExpiresAt = DateTime.UtcNow.AddHours(24)
+                }, cancellationToken);
+            }
+
+            // Audit log
+            var userId = httpContext.Request.Headers.TryGetValue("X-User-Id", out var uid) ? uid.ToString() : null;
+            await auditLogRepository.LogAsync(new AuditEntry
+            {
+                Action = "payment.applied",
+                EntityType = "LoanContract",
+                EntityId = id,
+                UserId = userId,
+                Details = new { request.Amount, Currency = request.Currency ?? "USD" }
+            }, cancellationToken);
 
             return Results.Ok(response);
         }

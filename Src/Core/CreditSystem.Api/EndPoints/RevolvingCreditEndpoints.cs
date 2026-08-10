@@ -15,9 +15,11 @@ using CreditSystem.Application.Queries.RevolvingCredit.GetRevolvingTransactions;
 
 using CreditSystem.Domain.Abstractions.Repositories;
 using CreditSystem.Domain.Abstractions.Services;
+using CreditSystem.Domain.Models;
 using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using System.Text.Json;
 
 namespace CreditSystem.Api.Endpoints;
 
@@ -236,10 +238,30 @@ public static class RevolvingCreditEndpoints
 
     private static async Task<IResult> ApplyPayment(
         Guid id,
+        HttpContext httpContext,
         [FromBody] ApplyRevolvingPaymentRequest request,
         [FromServices] IMediator mediator,
+        [FromServices] IIdempotencyRepository idempotencyRepository,
+        [FromServices] IAuditLogRepository auditLogRepository,
         CancellationToken cancellationToken)
     {
+        // Idempotency check
+        if (httpContext.Request.Headers.TryGetValue("Idempotency-Key", out var rawKey) &&
+            Guid.TryParse(rawKey, out var idempotencyKey))
+        {
+            var existing = await idempotencyRepository.FindAsync(idempotencyKey, cancellationToken);
+            if (existing is not null)
+            {
+                var cached = JsonSerializer.Deserialize<ApplyRevolvingPaymentResponse>(existing.ResponseBody)!;
+                httpContext.Response.Headers["Idempotency-Replayed"] = "true";
+                return Results.Ok(cached);
+            }
+        }
+        else
+        {
+            idempotencyKey = Guid.Empty;
+        }
+
         try
         {
             var command = new ApplyRevolvingPaymentCommand
@@ -262,6 +284,27 @@ public static class RevolvingCreditEndpoints
                     Extensions = { ["errors"] = response.Errors }
                 });
             }
+
+            if (idempotencyKey != Guid.Empty)
+            {
+                await idempotencyRepository.SaveAsync(new IdempotencyRecord
+                {
+                    Key = idempotencyKey,
+                    ResponseStatus = 200,
+                    ResponseBody = JsonSerializer.Serialize(response),
+                    ExpiresAt = DateTime.UtcNow.AddHours(24)
+                }, cancellationToken);
+            }
+
+            var userId = httpContext.Request.Headers.TryGetValue("X-User-Id", out var uid) ? uid.ToString() : null;
+            await auditLogRepository.LogAsync(new AuditEntry
+            {
+                Action = "revolving.payment.applied",
+                EntityType = "RevolvingCredit",
+                EntityId = id,
+                UserId = userId,
+                Details = new { request.Amount, Currency = request.Currency ?? "USD" }
+            }, cancellationToken);
 
             return Results.Ok(response);
         }

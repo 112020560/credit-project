@@ -5,6 +5,9 @@ using CreditSystem.Api.Infrastructure;
 using CreditSystem.Application;
 using CreditSystem.Domain;
 using CreditSystem.Infrastructure;
+using CreditSystem.Infrastructure.HealthChecks;
+using HealthChecks.UI.Client;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Serilog;
 using SmartCore.Telemetry;
 
@@ -25,6 +28,13 @@ builder.Services.AddSmartCoreTelemetry(options =>
 builder.Services.AddApplication(builder.Configuration);
 builder.Services.AddBusiness(builder.Configuration);
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddHealthCheckServices();
+
+var creditDbConnectionString = builder.Configuration.GetConnectionString("CreditDb")!;
+builder.Services.AddHealthChecks()
+    .AddNpgSql(creditDbConnectionString, name: "postgres")
+    .AddCheck<UnderwritingPolicyHealthCheck>("underwriting-policy")
+    .AddCheck<RabbitMqHealthCheck>("rabbitmq");
 
 //builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
@@ -83,6 +93,16 @@ v1.MapRevolvingCreditEndpoints();
 v1.MapPaymentsEndpoints();
 v1.MapWebhooksEndpoints();
 v1.MapRiskEndpoints();
+
+// Health endpoints (outside versioned group — framework-level probes)
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    Predicate = _ => false  // liveness: always healthy if process is up
+});
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
+});
 
 app.UseHttpsRedirection();
 

@@ -1,4 +1,6 @@
 using CreditSystem.Application.Job;
+using CreditSystem.Domain.Abstractions;
+using CreditSystem.Infrastructure.Locking;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -9,15 +11,18 @@ namespace CreditSystem.Infrastructure.Workers;
 public class RiskClassificationWorker : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IDistributedLock _distributedLock;
     private readonly ILogger<RiskClassificationWorker> _logger;
     private readonly TimeSpan _runTime;
 
     public RiskClassificationWorker(
         IServiceScopeFactory scopeFactory,
+        IDistributedLock distributedLock,
         ILogger<RiskClassificationWorker> logger,
         IConfiguration configuration)
     {
         _scopeFactory = scopeFactory;
+        _distributedLock = distributedLock;
         _logger = logger;
         _runTime = TimeSpan.Parse(configuration.GetValue<string>("Jobs:RiskClassification:RunTime", "02:00:00"));
     }
@@ -40,7 +45,21 @@ public class RiskClassificationWorker : BackgroundService
                     await Task.Delay(delay, stoppingToken);
                 }
 
-                await RunJobAsync(stoppingToken);
+                var acquired = await _distributedLock.TryAcquireAsync(WorkerLockId.RiskClassification, stoppingToken);
+                if (!acquired)
+                {
+                    _logger.LogDebug("Risk classification lock not available — another instance is running");
+                    continue;
+                }
+
+                try
+                {
+                    await RunJobAsync(stoppingToken);
+                }
+                finally
+                {
+                    await _distributedLock.ReleaseAsync(WorkerLockId.RiskClassification, stoppingToken);
+                }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {

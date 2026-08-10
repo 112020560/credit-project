@@ -3,11 +3,14 @@ using CreditSystem.Domain.Abstractions;
 using CreditSystem.Domain.Abstractions.EventStore;
 using CreditSystem.Domain.Abstractions.Persistence;
 using CreditSystem.Domain.Abstractions.Projections;
+using CreditSystem.Domain.Abstractions;
 using CreditSystem.Domain.Abstractions.Repositories;
 using CreditSystem.Domain.Abstractions.Services;
 using CreditSystem.Domain.Models;
 
 using CreditSystem.Infrastructure.EventStore;
+using CreditSystem.Infrastructure.HealthChecks;
+using CreditSystem.Infrastructure.Locking;
 using CreditSystem.Infrastructure.Messaging.Outbox;
 using CreditSystem.Infrastructure.Messaging.RabbitMq.Consumers;
 using CreditSystem.Infrastructure.Messaging.RabbitMq.Messages;
@@ -39,6 +42,9 @@ public static class DependencyInjection
     
     private static IServiceCollection AddEventStore(this IServiceCollection services, IConfiguration configuration)
     {
+        services.AddSingleton<IDistributedLock>(_ =>
+            new PostgresAdvisoryLock(configuration.GetConnectionString("CreditDb")!));
+
         services.AddSingleton<IEventSerializer, JsonEventSerializer>();
         services.AddSingleton<IHashGenerator, Sha256HashGenerator>();
         services.AddScoped<IEventStore>(sp => 
@@ -133,6 +139,21 @@ public static class DependencyInjection
         services.AddScoped<IRiskClassificationRepository>(sp =>
             new RiskClassificationRepository(connectionString));
 
+        services.AddScoped<IIdempotencyRepository>(sp =>
+            new IdempotencyRepository(connectionString));
+
+        services.AddScoped<IAuditLogRepository>(sp =>
+            new AuditLogRepository(
+                connectionString,
+                sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<AuditLogRepository>>()));
+
+        return services;
+    }
+
+    public static IServiceCollection AddHealthCheckServices(this IServiceCollection services)
+    {
+        services.AddTransient<UnderwritingPolicyHealthCheck>();
+        services.AddTransient<RabbitMqHealthCheck>();
         return services;
     }
 

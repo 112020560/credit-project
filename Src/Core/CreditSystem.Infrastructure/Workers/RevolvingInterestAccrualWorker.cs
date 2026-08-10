@@ -1,4 +1,6 @@
 using CreditSystem.Application.Job;
+using CreditSystem.Domain.Abstractions;
+using CreditSystem.Infrastructure.Locking;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -9,15 +11,18 @@ namespace CreditSystem.Infrastructure.Workers;
 public class RevolvingInterestAccrualWorker : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IDistributedLock _distributedLock;
     private readonly ILogger<RevolvingInterestAccrualWorker> _logger;
     private readonly TimeSpan _runTime;
 
     public RevolvingInterestAccrualWorker(
         IServiceScopeFactory scopeFactory,
+        IDistributedLock distributedLock,
         ILogger<RevolvingInterestAccrualWorker> logger,
         IConfiguration configuration)
     {
         _scopeFactory = scopeFactory;
+        _distributedLock = distributedLock;
         _logger = logger;
         _runTime = TimeSpan.Parse(
             configuration.GetValue<string>("Jobs:RevolvingInterestAccrual:RunTime", "02:30:00"));
@@ -41,7 +46,21 @@ public class RevolvingInterestAccrualWorker : BackgroundService
                     await Task.Delay(delay, stoppingToken);
                 }
 
-                await RunJobAsync(stoppingToken);
+                var acquired = await _distributedLock.TryAcquireAsync(WorkerLockId.RevolvingInterestAccrual, stoppingToken);
+                if (!acquired)
+                {
+                    _logger.LogDebug("Revolving interest accrual lock not available — another instance is running");
+                    continue;
+                }
+
+                try
+                {
+                    await RunJobAsync(stoppingToken);
+                }
+                finally
+                {
+                    await _distributedLock.ReleaseAsync(WorkerLockId.RevolvingInterestAccrual, stoppingToken);
+                }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
