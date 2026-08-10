@@ -18,4 +18,7 @@ public record CreateContractCommand : IRequest<CreateContractResponse>
     public int TermMonths { get; init; }
     public IReadOnlyList<GuaranteeInput>? Guarantees { get; init; }
     public AmortizationMethod AmortizationMethod { get; init; } = AmortizationMethod.French;
+    public string RateType { get; init; } = "Fixed";
+    public decimal? Spread { get; init; }
+    public string? ReferenceRateId { get; init; }
 }

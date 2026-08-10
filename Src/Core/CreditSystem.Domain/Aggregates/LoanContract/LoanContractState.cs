@@ -15,6 +15,9 @@ public record LoanContractState
     public Money TotalFees { get; init; }
     public Money OriginationFee { get; init; }
     public InterestRate InterestRate { get; init; }
+    public RateType RateType { get; init; } = RateType.Fixed;
+    public decimal Spread { get; init; } = 0;
+    public string? ReferenceRateId { get; init; }
     public int TermMonths { get; init; }
     public PaymentSchedule Schedule { get; init; }
     public int PaymentsMade { get; init; }

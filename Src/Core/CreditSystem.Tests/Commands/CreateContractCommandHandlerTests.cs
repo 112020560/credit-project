@@ -25,6 +25,7 @@ public class CreateContractCommandHandlerTests
     private readonly ILoanQueryService _queryService = Substitute.For<ILoanQueryService>();
     private readonly IProjectionEngine _projectionEngine = Substitute.For<IProjectionEngine>();
     private readonly IAmortizationCalculatorFactory _calcFactory = Substitute.For<IAmortizationCalculatorFactory>();
+    private readonly IReferenceRateRepository _referenceRateRepo = Substitute.For<IReferenceRateRepository>();
 
     private static readonly UnderwritingPolicy DefaultPolicy =
         new(8.0m, 90, NoScoreBehavior.ApproveWithPenalty, 5, false);
@@ -63,6 +64,7 @@ public class CreateContractCommandHandlerTests
             DefaultPolicy,
             _calcFactory,
             _projectionEngine,
+            _referenceRateRepo,
             NullLogger<CreateContractCommandHandler>.Instance);
     }
 

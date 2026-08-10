@@ -8,4 +8,5 @@ public static class WorkerLockId
     public const long StatementGeneration      = 1004L;
     public const long RevolvingPaymentMissed   = 1005L;
     public const long RiskClassification       = 1006L;
+    public const long RateAdjustment          = 1007L;
 }

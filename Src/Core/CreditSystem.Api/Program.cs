@@ -93,6 +93,7 @@ v1.MapRevolvingCreditEndpoints();
 v1.MapPaymentsEndpoints();
 v1.MapWebhooksEndpoints();
 v1.MapRiskEndpoints();
+v1.MapReferenceRateEndpoints();
 
 // Health endpoints (outside versioned group — framework-level probes)
 app.MapHealthChecks("/health", new HealthCheckOptions

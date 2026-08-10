@@ -29,6 +29,9 @@ public class LoanSummaryReadModel
     public DateTime UpdatedAt { get; set; }
     public string? RiskCategory { get; set; }
     public decimal EstimatedProvision { get; set; }
+    public string RateType { get; set; } = "Fixed";
+    public decimal Spread { get; set; } = 0;
+    public string? ReferenceRateId { get; set; }
 
     // Computed
     [JsonIgnore]

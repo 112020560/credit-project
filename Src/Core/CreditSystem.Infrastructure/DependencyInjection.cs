@@ -1,4 +1,5 @@
 using CreditSystem.Application.Configuration;
+using CreditSystem.Application.Job;
 using CreditSystem.Domain.Abstractions;
 using CreditSystem.Domain.Abstractions.EventStore;
 using CreditSystem.Domain.Abstractions.Persistence;
@@ -147,6 +148,10 @@ public static class DependencyInjection
                 connectionString,
                 sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<AuditLogRepository>>()));
 
+        services.AddScoped<IReferenceRateRepository, ReferenceRateRepository>();
+
+        services.AddScoped<IRateAdjustmentJob, RateAdjustmentJob>();
+
         return services;
     }
 
@@ -172,6 +177,9 @@ public static class DependencyInjection
 
         // Risk classification worker
         services.AddHostedService<RiskClassificationWorker>();
+
+        // Rate adjustment worker
+        services.AddHostedService<RateAdjustmentWorker>();
 
         return services;
     }

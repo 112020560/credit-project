@@ -51,7 +51,10 @@ public class LoanContractAggregate
             AmortizationMethod = amortizationMethod,
             Schedule = schedule,
             OriginationFee = fee,
-            EvaluationMetadata = evaluationMetadata
+            EvaluationMetadata = evaluationMetadata,
+            RateType = rate.RateType,
+            Spread = rate.Spread,
+            ReferenceRateId = rate.ReferenceRateId
         }, isNew: true);
 
         aggregate.Apply(new ContractApproved
@@ -255,6 +258,40 @@ public class LoanContractAggregate
         }, isNew: true);
     }
 
+    public void AdjustRate(decimal newReferenceRateValue, DateTime adjustedAt)
+    {
+        if (State.RateType == RateType.Fixed)
+            throw new DomainException("Cannot adjust rate on a fixed-rate loan");
+
+        EnsureStatus(ContractStatus.Active, "Cannot adjust rate");
+
+        var newEffectiveRate = newReferenceRateValue + State.Spread;
+        if (Math.Abs(newEffectiveRate - State.InterestRate.AnnualRate) < 0.0001m)
+            return;
+
+        var remainingEntries = State.Schedule.Entries
+            .Where(e => e.DueDate >= adjustedAt.Date)
+            .ToList();
+
+        if (remainingEntries.Count <= 1)
+            return;
+
+        var newRate = new InterestRate(newEffectiveRate, RateType.Variable, State.Spread, State.ReferenceRateId);
+        var newSchedule = PaymentSchedule.Calculate(State.CurrentBalance, newRate, remainingEntries.Count, adjustedAt);
+
+        Apply(new RateAdjusted
+        {
+            AggregateId = Id,
+            OldRate = State.InterestRate.AnnualRate,
+            NewRate = newEffectiveRate,
+            Spread = State.Spread,
+            ReferenceRateId = State.ReferenceRateId!,
+            ReferenceRateValue = newReferenceRateValue,
+            AdjustedAt = adjustedAt,
+            NewSchedule = newSchedule
+        }, isNew: true);
+    }
+
     #endregion
 
     #region Event Application
@@ -293,6 +330,9 @@ public class LoanContractAggregate
                 Principal = e.Principal,
                 CurrentBalance = e.Principal,
                 InterestRate = e.InterestRate,
+                RateType = e.RateType,
+                Spread = e.Spread,
+                ReferenceRateId = e.ReferenceRateId,
                 TermMonths = e.TermMonths,
                 AmortizationMethod = e.AmortizationMethod,
                 Schedule = e.Schedule,
@@ -372,6 +412,14 @@ public class LoanContractAggregate
                 AccruedInterest = Money.Zero(),
                 AccruedPenaltyInterest = Money.Zero(),
                 PaidOffAt = e.PaidOffAt,
+                Version = state.Version + 1
+            },
+
+            RateAdjusted e => state with
+            {
+                InterestRate = new InterestRate(e.NewRate, state.RateType, state.Spread, state.ReferenceRateId),
+                Schedule = e.NewSchedule,
+                NextPaymentDue = e.NewSchedule.Entries.FirstOrDefault()?.DueDate,
                 Version = state.Version + 1
             },
 

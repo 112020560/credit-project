@@ -2,6 +2,7 @@
 using CreditSystem.Domain.Aggregates.LoanContract.Events;
 using CreditSystem.Domain.Abstractions.Events;
 using CreditSystem.Domain.Abstractions.Repositories;
+using CreditSystem.Domain.Enums;
 using CreditSystem.Domain.Models.ReadModels;
 using CreditSystem.Infrastructure.Projections;
 using Microsoft.Extensions.Logging;
@@ -55,6 +56,9 @@ public class LoanSummaryProjector : IProjection
             case ContractRestructured e:
                 await HandleContractRestructured(e, ct);
                 break;
+            case RateAdjusted e:
+                await HandleRateAdjusted(e, ct);
+                break;
         }
     }
 
@@ -83,7 +87,10 @@ public class LoanSummaryProjector : IProjection
             NextPaymentAmount = firstPayment?.TotalPayment.Amount,
             CreatedAt = e.OccurredAt,
             Version = e.Version,
-            UpdatedAt = DateTime.UtcNow
+            UpdatedAt = DateTime.UtcNow,
+            RateType = e.RateType.ToString(),
+            Spread = e.Spread,
+            ReferenceRateId = e.ReferenceRateId
         };
 
         await _store.UpsertAsync("rm_loan_summaries", model, "loan_id", ct);
@@ -254,6 +261,38 @@ public class LoanSummaryProjector : IProjection
         }, ct);
 
         _logger.LogDebug("Projected ContractRestructured for loan {LoanId}", e.AggregateId);
+    }
+
+    private async Task HandleRateAdjusted(RateAdjusted e, CancellationToken ct)
+    {
+        var firstPayment = e.NewSchedule.Entries.FirstOrDefault();
+
+        const string sql = @"
+        UPDATE rm_loan_summaries
+        SET interest_rate     = @NewRate,
+            rate_type         = 'Variable',
+            spread            = @Spread,
+            reference_rate_id = @ReferenceRateId,
+            next_payment_date   = @NextPaymentDate,
+            next_payment_amount = @NextPaymentAmount,
+            version           = @Version,
+            updated_at        = @Now
+        WHERE loan_id = @LoanId";
+
+        await _store.ExecuteAsync(sql, new
+        {
+            LoanId = e.AggregateId,
+            NewRate = e.NewRate,
+            Spread = e.Spread,
+            ReferenceRateId = e.ReferenceRateId,
+            NextPaymentDate = firstPayment?.DueDate,
+            NextPaymentAmount = firstPayment?.TotalPayment.Amount,
+            Version = e.Version,
+            Now = DateTime.UtcNow
+        }, ct);
+
+        _logger.LogDebug("Projected RateAdjusted for loan {LoanId}: {OldRate}% → {NewRate}%",
+            e.AggregateId, e.OldRate, e.NewRate);
     }
 
     public async Task RebuildAsync(IAsyncEnumerable<IDomainEvent> events, CancellationToken ct = default)

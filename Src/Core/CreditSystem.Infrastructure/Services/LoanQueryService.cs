@@ -400,4 +400,23 @@ public class LoanQueryService: ILoanQueryService
         var results = await connection.QueryAsync<LoanRiskInfo>(sql);
         return results.ToList().AsReadOnly();
     }
+
+    public async Task<IReadOnlyList<VariableRateLoanInfo>> GetActiveVariableRateLoansAsync(CancellationToken ct = default)
+    {
+        const string sql = @"
+            SELECT
+                loan_id           AS LoanId,
+                interest_rate     AS CurrentRate,
+                spread            AS Spread,
+                reference_rate_id AS ReferenceRateId
+            FROM rm_loan_summaries
+            WHERE status = 'Active'
+              AND rate_type = 'Variable'
+              AND reference_rate_id IS NOT NULL";
+
+        await using var connection = new NpgsqlConnection(_connectionString);
+        var results = await connection.QueryAsync<VariableRateLoanInfo>(
+            new CommandDefinition(sql, cancellationToken: ct));
+        return results.ToList().AsReadOnly();
+    }
 }

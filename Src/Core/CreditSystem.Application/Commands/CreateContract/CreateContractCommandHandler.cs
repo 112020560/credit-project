@@ -11,6 +11,7 @@ using CreditSystem.Domain.Services.Amortization;
 using CreditSystem.Domain.ValueObjects;
 using MediatR;
 using Microsoft.Extensions.Logging;
+using DomainRateType = CreditSystem.Domain.Enums.RateType;
 
 namespace CreditSystem.Application.Commands.CreateContract;
 
@@ -26,6 +27,7 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
     private readonly UnderwritingPolicy _policy;
     private readonly IAmortizationCalculatorFactory _calculatorFactory;
     private readonly IProjectionEngine _projectionEngine;
+    private readonly IReferenceRateRepository _referenceRateRepository;
     private readonly ILogger<CreateContractCommandHandler> _logger;
 
     public CreateContractCommandHandler(
@@ -39,6 +41,7 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
         UnderwritingPolicy policy,
         IAmortizationCalculatorFactory calculatorFactory,
         IProjectionEngine projectionEngine,
+        IReferenceRateRepository referenceRateRepository,
         ILogger<CreateContractCommandHandler> logger)
     {
         _repository = repository;
@@ -51,6 +54,7 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
         _policy = policy;
         _calculatorFactory = calculatorFactory;
         _projectionEngine = projectionEngine;
+        _referenceRateRepository = referenceRateRepository;
         _logger = logger;
     }
 
@@ -146,7 +150,23 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
 
         // 3. Crear el Aggregate
         var principal = new Money(request.Amount, request.Currency);
-        var interestRate = new InterestRate(evaluation.InterestRate);
+
+        InterestRate interestRate;
+        if (request.RateType == "Variable" && request.ReferenceRateId != null && request.Spread.HasValue)
+        {
+            var referenceRate = await _referenceRateRepository.GetCurrentAsync(
+                request.ReferenceRateId, cancellationToken);
+
+            if (referenceRate == null)
+                return CreateContractResponse.Failed($"Reference rate '{request.ReferenceRateId}' not found");
+
+            var effectiveRate = referenceRate.CurrentValue + request.Spread.Value;
+            interestRate = new InterestRate(effectiveRate, DomainRateType.Variable, request.Spread.Value, request.ReferenceRateId);
+        }
+        else
+        {
+            interestRate = new InterestRate(evaluation.InterestRate);
+        }
 
         var effectiveOriginationFeeRate = product.OriginationFeeRate ?? _policy.OriginationFeeRate;
         var originationFee = new Money(request.Amount * effectiveOriginationFeeRate / 100m, request.Currency);

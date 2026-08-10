@@ -5,6 +5,7 @@ namespace CreditSystem.Application.Commands.CreateContract;
 public class CreateContractCommandValidator : AbstractValidator<CreateContractCommand>
 {
     private static readonly string[] AllowedCurrencies = { "USD", "EUR", "CRC" };
+    private static readonly string[] AllowedRateTypes = { "Fixed", "Variable" };
 
     public CreateContractCommandValidator()
     {
@@ -28,6 +29,22 @@ public class CreateContractCommandValidator : AbstractValidator<CreateContractCo
         RuleFor(x => x.TermMonths)
             .InclusiveBetween(1, 360)
             .WithMessage("Term must be between 1 and 360 months");
+
+        RuleFor(x => x.RateType)
+            .Must(r => AllowedRateTypes.Contains(r))
+            .WithMessage($"RateType must be one of: {string.Join(", ", AllowedRateTypes)}");
+
+        When(x => x.RateType == "Variable", () =>
+        {
+            RuleFor(x => x.Spread)
+                .NotNull()
+                .GreaterThanOrEqualTo(0)
+                .WithMessage("Spread is required and must be >= 0 for variable-rate loans");
+
+            RuleFor(x => x.ReferenceRateId)
+                .NotEmpty()
+                .WithMessage("ReferenceRateId is required for variable-rate loans");
+        });
 
         RuleForEach(x => x.Guarantees)
             .ChildRules(g =>

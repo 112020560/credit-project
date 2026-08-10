@@ -14,4 +14,7 @@ public record ContractCreated : DomainEvent
     public PaymentSchedule Schedule { get; init; }
     public Money OriginationFee { get; init; }
     public Dictionary<string, object> EvaluationMetadata { get; init; }
+    public RateType RateType { get; init; } = RateType.Fixed;
+    public decimal Spread { get; init; } = 0;
+    public string? ReferenceRateId { get; init; }
 }
