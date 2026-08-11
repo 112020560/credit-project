@@ -1,6 +1,7 @@
 using CreditSystem.Application.Configuration;
 using CreditSystem.Application.Job;
 using CreditSystem.Domain.Abstractions;
+using CreditSystem.Domain.Abstractions.Documents;
 using CreditSystem.Domain.Abstractions.EventStore;
 using CreditSystem.Domain.Abstractions.Persistence;
 using CreditSystem.Domain.Abstractions.Projections;
@@ -8,6 +9,7 @@ using CreditSystem.Domain.Abstractions;
 using CreditSystem.Domain.Abstractions.Repositories;
 using CreditSystem.Domain.Abstractions.Services;
 using CreditSystem.Domain.Models;
+using CreditSystem.Infrastructure.Documents;
 
 using CreditSystem.Infrastructure.EventStore;
 using CreditSystem.Infrastructure.HealthChecks;
@@ -151,6 +153,11 @@ public static class DependencyInjection
         services.AddScoped<IReferenceRateRepository, ReferenceRateRepository>();
 
         services.AddScoped<IRateAdjustmentJob, RateAdjustmentJob>();
+
+        services.AddScoped<ScribanTemplateEngine>();
+        services.AddScoped<QuestPdfRenderer>();
+        services.AddScoped<ExcelExporter>();
+        services.AddScoped<IDocumentGenerator, DocumentGenerator>();
 
         return services;
     }
