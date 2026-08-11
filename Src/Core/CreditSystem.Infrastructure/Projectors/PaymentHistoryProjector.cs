@@ -32,7 +32,8 @@ public class PaymentHistoryProjector : IProjection
                 FeesPaid = e.FeePaid.Amount,
                 BalanceAfter = e.NewBalance.Amount,
                 PaymentMethod = e.Method.ToString(),
-                Status = "completed"
+                Status = "completed",
+                SocialCapitalContributed = e.SocialCapitalContributed.Amount
             };
 
             await _store.UpsertAsync("rm_payment_history", model, "id", ct);

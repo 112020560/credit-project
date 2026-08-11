@@ -11,6 +11,7 @@ public record ApplyPaymentResponse
     public decimal? FeesPaid { get; init; }
     public decimal? NewBalance { get; init; }
     public bool? IsPaidOff { get; init; }
+    public decimal? SocialCapitalContributed { get; init; }
     public string? Message { get; init; }
     public IReadOnlyList<string>? Errors { get; init; }
 
@@ -22,7 +23,8 @@ public record ApplyPaymentResponse
         decimal interestPaid,
         decimal feesPaid,
         decimal newBalance,
-        bool isPaidOff) => new()
+        bool isPaidOff,
+        decimal socialCapitalContributed = 0) => new()
     {
         Success = true,
         PaymentId = paymentId,
@@ -33,6 +35,7 @@ public record ApplyPaymentResponse
         FeesPaid = feesPaid,
         NewBalance = newBalance,
         IsPaidOff = isPaidOff,
+        SocialCapitalContributed = socialCapitalContributed,
         Message = isPaidOff ? "Loan paid off successfully" : "Payment applied successfully"
     };
 

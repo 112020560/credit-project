@@ -15,4 +15,5 @@ public record PaymentApplied : DomainEvent
     public Money NewBalance { get; init; }
     public int PaymentNumber { get; init; }
     public PaymentMethod Method { get; init; }
+    public Money SocialCapitalContributed { get; init; }
 }

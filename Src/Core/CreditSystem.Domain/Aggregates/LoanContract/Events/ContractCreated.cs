@@ -7,6 +7,7 @@ namespace CreditSystem.Domain.Aggregates.LoanContract.Events;
 public record ContractCreated : DomainEvent
 {
     public Guid CustomerId { get; init; }
+    public Guid? ProductId { get; init; }
     public Money Principal { get; init; }
     public InterestRate InterestRate { get; init; }
     public int TermMonths { get; init; }

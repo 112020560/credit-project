@@ -4,6 +4,7 @@ using CreditSystem.Domain.Enums;
 using CreditSystem.Domain.Exceptions;
 using CreditSystem.Domain.Services.Amortization;
 using CreditSystem.Domain.ValueObjects;
+using PaymentWaterfall = CreditSystem.Domain.ValueObjects.PaymentWaterfall;
 
 namespace CreditSystem.Domain.Aggregates.LoanContract;
 
@@ -31,7 +32,8 @@ public class LoanContractAggregate
         AmortizationMethod amortizationMethod,
         IAmortizationCalculator calculator,
         Dictionary<string, object> evaluationMetadata,
-        Money? originationFee = null)
+        Money? originationFee = null,
+        Guid? productId = null)
     {
         var aggregate = new LoanContractAggregate();
         var id = Guid.NewGuid();
@@ -45,6 +47,7 @@ public class LoanContractAggregate
         {
             AggregateId = id,
             CustomerId = customerId,
+            ProductId = productId,
             Principal = principal,
             InterestRate = rate,
             TermMonths = termMonths,
@@ -106,58 +109,52 @@ public class LoanContractAggregate
         }, isNew: true);
     }
 
-    public void ApplyPayment(Guid paymentId, Money amount, PaymentMethod method)
+    public void ApplyPayment(
+        Guid paymentId,
+        Money amount,
+        PaymentMethod method,
+        PaymentWaterfall? waterfall = null,
+        Money? socialCapitalContributed = null,
+        SocialCapitalCollectionMode collectionMode = SocialCapitalCollectionMode.SeparateCollection)
     {
         if (State.Status != ContractStatus.Active && State.Status != ContractStatus.Delinquent)
             throw new DomainException("Contract not in payable status");
-        
+
         if (amount.Currency != State.Principal.Currency)
             throw new DomainException($"Currency mismatch: expected {State.Principal.Currency}, got {amount.Currency}");
 
-        // Apply in order: fees -> penalty interest -> regular interest -> principal
-        var remainingAmount = amount;
-        var feePaid = Money.Zero();
-        var penaltyInterestPaid = Money.Zero();
-        var interestPaid = Money.Zero();
-        var principalPaid = Money.Zero();
+        var effectiveWaterfall = waterfall ?? PaymentWaterfall.Default;
+        var socialCapital = socialCapitalContributed ?? Money.Zero(amount.Currency);
 
-        if (State.TotalFees.Amount > 0)
-        {
-            feePaid = remainingAmount > State.TotalFees ? State.TotalFees : remainingAmount;
-            remainingAmount = remainingAmount - feePaid;
-        }
+        // If social capital is included in the payment, deduct it first so the loan gets the remainder.
+        var amountForLoan = collectionMode == SocialCapitalCollectionMode.IncludedInPayment && socialCapital.Amount > 0
+            ? new Money(Math.Max(0m, amount.Amount - socialCapital.Amount), amount.Currency)
+            : amount;
 
-        if (remainingAmount.Amount > 0 && State.AccruedPenaltyInterest.Amount > 0)
-        {
-            penaltyInterestPaid = remainingAmount > State.AccruedPenaltyInterest ? State.AccruedPenaltyInterest : remainingAmount;
-            remainingAmount = remainingAmount - penaltyInterestPaid;
-        }
+        var context = new LoanPaymentContext(
+            TotalFees:      State.TotalFees,
+            PenaltyInterest: State.AccruedPenaltyInterest,
+            AccruedInterest: State.AccruedInterest,
+            Principal:      State.CurrentBalance,
+            Currency:       amount.Currency);
 
-        if (remainingAmount.Amount > 0 && State.AccruedInterest.Amount > 0)
-        {
-            interestPaid = remainingAmount > State.AccruedInterest ? State.AccruedInterest : remainingAmount;
-            remainingAmount = remainingAmount - interestPaid;
-        }
+        var dist = effectiveWaterfall.Apply(amountForLoan, context);
 
-        if (remainingAmount.Amount > 0)
-        {
-            principalPaid = remainingAmount > State.CurrentBalance ? State.CurrentBalance : remainingAmount;
-        }
-
-        var newBalance = State.CurrentBalance - principalPaid;
+        var newBalance = State.CurrentBalance - dist.PrincipalPaid;
 
         Apply(new PaymentApplied
         {
             AggregateId = Id,
             PaymentId = paymentId,
             TotalAmount = amount,
-            PrincipalPaid = principalPaid,
-            InterestPaid = interestPaid,
-            PenaltyInterestPaid = penaltyInterestPaid,
-            FeePaid = feePaid,
+            PrincipalPaid = dist.PrincipalPaid,
+            InterestPaid = dist.InterestPaid,
+            PenaltyInterestPaid = dist.PenaltyInterestPaid,
+            FeePaid = dist.FeesPaid,
             NewBalance = newBalance,
             PaymentNumber = State.PaymentsMade + 1,
-            Method = method
+            Method = method,
+            SocialCapitalContributed = socialCapital
         }, isNew: true);
 
         if (newBalance.Amount == 0)
@@ -167,7 +164,7 @@ public class LoanContractAggregate
                 AggregateId = Id,
                 FinalPayment = amount,
                 TotalPrincipalPaid = State.Principal,
-                TotalInterestPaid = State.AccruedInterest + interestPaid,
+                TotalInterestPaid = State.AccruedInterest + dist.InterestPaid,
                 TotalFeesPaid = State.TotalFees,
                 PaidOffAt = DateTime.UtcNow,
                 EarlyPayoff = State.PaymentsMade < State.TermMonths
@@ -327,6 +324,7 @@ public class LoanContractAggregate
             {
                 Id = e.AggregateId,
                 CustomerId = e.CustomerId,
+                ProductId = e.ProductId,
                 Principal = e.Principal,
                 CurrentBalance = e.Principal,
                 InterestRate = e.InterestRate,
@@ -366,12 +364,13 @@ public class LoanContractAggregate
                 AccruedInterest = state.AccruedInterest - e.InterestPaid,
                 AccruedPenaltyInterest = state.AccruedPenaltyInterest - e.PenaltyInterestPaid,
                 TotalFees = state.TotalFees - e.FeePaid,
+                TotalSocialCapitalContributed = state.TotalSocialCapitalContributed + e.SocialCapitalContributed,
                 PaymentsMade = state.PaymentsMade + 1,
                 LastPaymentDate = DateTime.UtcNow,
                 NextPaymentDue = state.Schedule.Entries
                     .FirstOrDefault(x => x.PaymentNumber == e.PaymentNumber + 1)?.DueDate,
-                Status = state.PaymentsMissed > 0 && e.NewBalance.Amount > 0 
-                    ? ContractStatus.Delinquent 
+                Status = state.PaymentsMissed > 0 && e.NewBalance.Amount > 0
+                    ? ContractStatus.Delinquent
                     : ContractStatus.Active,
                 Version = state.Version + 1
             },

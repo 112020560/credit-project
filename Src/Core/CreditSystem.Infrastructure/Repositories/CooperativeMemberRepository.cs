@@ -88,6 +88,18 @@ public class CooperativeMemberRepository : ICooperativeMemberRepository
         }, cancellationToken: ct));
     }
 
+    public async Task<decimal?> GetSocialCapitalBalanceAsync(Guid externalId, CancellationToken ct = default)
+    {
+        const string sql = """
+            SELECT social_capital_balance
+            FROM cooperative_members
+            WHERE external_id = @ExternalId
+            """;
+
+        await using var conn = new NpgsqlConnection(_connectionString);
+        return await conn.QuerySingleOrDefaultAsync<decimal?>(sql, new { ExternalId = externalId });
+    }
+
     private static CooperativeMemberAggregate MapToAggregate(dynamic row)
     {
         var status = Enum.TryParse<MemberStatus>((string)row.status, out var s) ? s : MemberStatus.Active;

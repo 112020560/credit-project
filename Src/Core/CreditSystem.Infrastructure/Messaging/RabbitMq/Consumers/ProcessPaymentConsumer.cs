@@ -1,5 +1,6 @@
 using CreditSystem.Domain.Abstractions;
 using CreditSystem.Domain.Abstractions.Projections;
+using CreditSystem.Domain.Abstractions.Repositories;
 using CreditSystem.Domain.Aggregates.LoanContract.Events;
 using CreditSystem.Domain.Enums;
 using CreditSystem.Domain.Exceptions;
@@ -18,6 +19,7 @@ namespace CreditSystem.Infrastructure.Messaging.RabbitMq.Consumers;
 public class ProcessPaymentConsumer : IConsumer<ProcessPaymentMessage>
 {
     private readonly ILoanContractRepository _repository;
+    private readonly ICreditProductRepository _productRepository;
     private readonly IProjectionEngine _projectionEngine;
     private readonly IPublishEndpoint _publishEndpoint;
     private readonly string _connectionString;
@@ -25,12 +27,14 @@ public class ProcessPaymentConsumer : IConsumer<ProcessPaymentMessage>
 
     public ProcessPaymentConsumer(
         ILoanContractRepository repository,
+        ICreditProductRepository productRepository,
         IProjectionEngine projectionEngine,
         IPublishEndpoint publishEndpoint,
         IConfiguration configuration,
         ILogger<ProcessPaymentConsumer> logger)
     {
         _repository = repository;
+        _productRepository = productRepository;
         _projectionEngine = projectionEngine;
         _publishEndpoint = publishEndpoint;
         _connectionString = configuration.GetConnectionString("CreditDb")!;
@@ -86,12 +90,38 @@ public class ProcessPaymentConsumer : IConsumer<ProcessPaymentMessage>
                 return;
             }
 
+            // Load product waterfall and social capital config
+            PaymentWaterfall? waterfall = null;
+            Money socialCapital = Money.Zero(message.Currency);
+            SocialCapitalCollectionMode collectionMode = SocialCapitalCollectionMode.SeparateCollection;
+
+            if (aggregate.State.ProductId.HasValue)
+            {
+                var product = await _productRepository.GetByIdAsync(
+                    aggregate.State.ProductId.Value, cancellationToken);
+                if (product != null)
+                {
+                    waterfall = product.Waterfall;
+                    if (product.SocialCapitalConfig != null)
+                    {
+                        var amount0 = new Money(message.Amount, message.Currency);
+                        socialCapital = product.SocialCapitalConfig.Calculate(
+                            paymentAmount: amount0,
+                            principalPaid: Money.Zero(message.Currency),
+                            originalAmount: aggregate.State.Principal,
+                            currency: message.Currency);
+                        collectionMode = product.SocialCapitalConfig.CollectionMode;
+                    }
+                }
+            }
+
             // Apply payment to aggregate
             var amount = new Money(message.Amount, message.Currency);
 
             try
             {
-                aggregate.ApplyPayment(message.PaymentId, amount, paymentMethod);
+                aggregate.ApplyPayment(message.PaymentId, amount, paymentMethod,
+                    waterfall, socialCapital, collectionMode);
             }
             catch (DomainException ex)
             {

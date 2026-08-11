@@ -1,5 +1,6 @@
 using CreditSystem.Domain.Abstractions;
 using CreditSystem.Domain.Abstractions.Projections;
+using CreditSystem.Domain.Abstractions.Repositories;
 using CreditSystem.Domain.Aggregates.LoanContract.Events;
 using CreditSystem.Domain.Enums;
 using CreditSystem.Domain.Exceptions;
@@ -12,15 +13,18 @@ namespace CreditSystem.Application.Commands.ApplyPayment;
 public class ApplyPaymentCommandHandler : IRequestHandler<ApplyPaymentCommand, ApplyPaymentResponse>
 {
     private readonly ILoanContractRepository _repository;
+    private readonly ICreditProductRepository _productRepository;
     private readonly IProjectionEngine _projectionEngine;
     private readonly ILogger<ApplyPaymentCommandHandler> _logger;
 
     public ApplyPaymentCommandHandler(
         ILoanContractRepository repository,
+        ICreditProductRepository productRepository,
         IProjectionEngine projectionEngine,
         ILogger<ApplyPaymentCommandHandler> logger)
     {
         _repository = repository;
+        _productRepository = productRepository;
         _projectionEngine = projectionEngine;
         _logger = logger;
     }
@@ -47,9 +51,33 @@ public class ApplyPaymentCommandHandler : IRequestHandler<ApplyPaymentCommand, A
         var paymentId = Guid.NewGuid();
         var amount = new Money(request.Amount, request.Currency);
 
+        // 3. Load product waterfall and social capital config (if product is assigned)
+        PaymentWaterfall? waterfall = null;
+        Money socialCapital = Money.Zero(request.Currency);
+        SocialCapitalCollectionMode collectionMode = SocialCapitalCollectionMode.SeparateCollection;
+
+        if (aggregate.State.ProductId.HasValue)
+        {
+            var product = await _productRepository.GetByIdAsync(aggregate.State.ProductId.Value, cancellationToken);
+            if (product != null)
+            {
+                waterfall = product.Waterfall;
+
+                if (product.SocialCapitalConfig != null)
+                {
+                    socialCapital = product.SocialCapitalConfig.Calculate(
+                        paymentAmount: amount,
+                        principalPaid: Money.Zero(request.Currency),
+                        originalAmount: aggregate.State.Principal,
+                        currency: request.Currency);
+                    collectionMode = product.SocialCapitalConfig.CollectionMode;
+                }
+            }
+        }
+
         try
         {
-            aggregate.ApplyPayment(paymentId, amount, paymentMethod);
+            aggregate.ApplyPayment(paymentId, amount, paymentMethod, waterfall, socialCapital, collectionMode);
         }
         catch (DomainException ex)
         {
@@ -103,6 +131,7 @@ public class ApplyPaymentCommandHandler : IRequestHandler<ApplyPaymentCommand, A
             interestPaid: paymentEvent.InterestPaid.Amount,
             feesPaid: paymentEvent.FeePaid.Amount,
             newBalance: paymentEvent.NewBalance.Amount,
-            isPaidOff: isPaidOff);
+            isPaidOff: isPaidOff,
+            socialCapitalContributed: paymentEvent.SocialCapitalContributed.Amount);
     }
 }

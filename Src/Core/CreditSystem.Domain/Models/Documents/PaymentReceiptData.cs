@@ -12,4 +12,5 @@ public class PaymentReceiptData
     public decimal? FeesApplied { get; init; }
     public decimal TotalPaid { get; init; }
     public decimal RemainingBalance { get; init; }
+    public decimal? SocialCapitalContributed { get; init; }
 }

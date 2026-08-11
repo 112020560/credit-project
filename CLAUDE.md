@@ -102,3 +102,59 @@ No auto-discovery via reflection. No URL versioning — routes follow the patter
 **Amortization calculators** (`CreditSystem.Domain/Services/Amortization/`): `FrenchAmortizationCalculator`, `GermanAmortizationCalculator`, `FlatAmortizationCalculator`, `AmericanAmortizationCalculator`, `InterestOnlyAmortizationCalculator`. Selection via `AmortizationCalculatorFactory` by `AmortizationMethod` enum. To add a new method: implement `IAmortizationCalculator` and register it in the factory.
 
 **Payment application order** (both aggregates): fees → accrued interest → principal.
+
+## Engineering Rules
+
+### General
+
+- Preserve the existing architecture unless a change explicitly requires an architectural decision.
+- Do not introduce new frameworks, libraries, or architectural patterns without justification.
+- Prefer existing abstractions and patterns over introducing new ones.
+- Do not modify unrelated code while implementing a change.
+- Do not infer business rules when they are not explicitly defined in the domain model or specification.
+- When existing code and documentation disagree, inspect the implementation and tests before making a decision.
+
+### Domain
+
+- Domain logic belongs in `CreditSystem.Domain`.
+- Domain must not depend on Application, Infrastructure, API, or external frameworks.
+- Business invariants must be enforced by aggregates or domain services.
+- Do not move business rules into API endpoints or infrastructure code.
+- Domain events must represent meaningful domain behavior, not technical persistence events.
+
+### Application
+
+- Application handlers orchestrate use cases; they should not contain domain business rules.
+- Commands mutate state through aggregates.
+- Queries must use read models or query services rather than reconstructing aggregates unnecessarily.
+- Validation that represents business invariants belongs in the domain; request/input validation belongs in FluentValidation.
+
+### Infrastructure
+
+- PostgreSQL access must use Dapper + Npgsql.
+- Do not introduce Entity Framework Core.
+- Do not create EF Core migrations.
+- Infrastructure implementations must respect abstractions defined by the Domain/Application layers.
+- Messaging and external integrations belong in Infrastructure.
+
+### API
+
+- Keep Minimal API endpoints thin.
+- Endpoints should delegate business operations to Application handlers.
+- Do not implement domain logic inside endpoint definitions.
+- Follow the existing `/api/{resource}` routing convention.
+- Do not introduce URL versioning unless explicitly required.
+
+### Testing
+
+- Every new business rule must have domain-level tests.
+- Every new use case must have application-level tests where appropriate.
+- Changes affecting persistence, messaging, projections, or integrations must include appropriate integration tests.
+- Existing tests must remain passing before considering a change complete.
+
+### Changes
+
+- Before implementing a non-trivial change, inspect the relevant OpenSpec specifications and existing implementation.
+- If the requested behavior is not defined, identify the ambiguity instead of inventing business behavior.
+- Architectural changes require explicit analysis before implementation.
+- Keep changes focused on the requested behavior.

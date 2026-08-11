@@ -14,6 +14,8 @@ public class CreditProduct
     public ProductStatus Status { get; private set; }
     public decimal? PenaltyRate { get; private set; }
     public decimal? OriginationFeeRate { get; private set; }
+    public PaymentWaterfall Waterfall { get; private set; }
+    public SocialCapitalConfig? SocialCapitalConfig { get; private set; }
 
     public CreditProduct(
         Guid id,
@@ -24,7 +26,9 @@ public class CreditProduct
         bool requiresCollateral,
         ProductStatus status = ProductStatus.Active,
         decimal? penaltyRate = null,
-        decimal? originationFeeRate = null)
+        decimal? originationFeeRate = null,
+        PaymentWaterfall? waterfall = null,
+        SocialCapitalConfig? socialCapitalConfig = null)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Product name cannot be empty", nameof(name));
@@ -38,5 +42,7 @@ public class CreditProduct
         Status = status;
         PenaltyRate = penaltyRate;
         OriginationFeeRate = originationFeeRate;
+        Waterfall = waterfall ?? PaymentWaterfall.Default;
+        SocialCapitalConfig = socialCapitalConfig;
     }
 }

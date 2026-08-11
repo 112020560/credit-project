@@ -184,7 +184,8 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
                 ["CollateralValue"] = effectiveCollateral?.Amount ?? 0,
                 ["EvaluationResults"] = evaluation.Results
             },
-            originationFee: originationFee
+            originationFee: originationFee,
+            productId: request.ProductId
         );
 
         var events = aggregate.UncommittedEvents.ToList();

@@ -604,4 +604,170 @@ public class LoanContractAggregateTests
     }
 
     #endregion
+
+    #region Waterfall and Social Capital Tests
+
+    [Fact]
+    public void ApplyPayment_WithCustomWaterfall_ShouldApplyInConfiguredOrder()
+    {
+        // Arrange: principal-first waterfall
+        var contract = LoanContractAggregate.Create(
+            customerId: Guid.NewGuid(),
+            principal: new Money(10000m, "USD"),
+            rate: new InterestRate(12m),
+            termMonths: 12,
+            amortizationMethod: AmortizationMethod.French,
+            calculator: _calculator,
+            evaluationMetadata: new Dictionary<string, object>());
+
+        contract.Disburse("WIRE", "123");
+        contract.AccrueInterest(DateTime.UtcNow.AddDays(-30), DateTime.UtcNow);
+
+        var interestBefore = contract.State.AccruedInterest.Amount;
+        var balanceBefore = contract.State.CurrentBalance.Amount;
+
+        var principalFirstWaterfall = new PaymentWaterfall([
+            new PaymentWaterfallStep(1, PaymentComponent.Principal),
+            new PaymentWaterfallStep(2, PaymentComponent.RegularInterest)
+        ]);
+
+        // Act: pay 500 — all goes to principal first
+        contract.ApplyPayment(Guid.NewGuid(), new Money(500m, "USD"), PaymentMethod.Wire,
+            waterfall: principalFirstWaterfall);
+
+        // Assert: principal reduced first, interest untouched
+        contract.State.CurrentBalance.Amount.Should().Be(balanceBefore - 500m);
+        contract.State.AccruedInterest.Amount.Should().Be(interestBefore);
+    }
+
+    [Fact]
+    public void ApplyPayment_WithSocialCapital_SeparateCollection_ShouldNotReduceLoanAmount()
+    {
+        // Arrange
+        var contract = CreateValidContract(principal: 10000m);
+        contract.Disburse("WIRE", "123");
+        var balanceBefore = contract.State.CurrentBalance.Amount;
+
+        var socialCapital = new Money(500m, "USD");
+
+        // Act: 1000 payment, 500 social capital (SeparateCollection = loan gets full 1000)
+        contract.ApplyPayment(Guid.NewGuid(), new Money(1000m, "USD"), PaymentMethod.Wire,
+            socialCapitalContributed: socialCapital,
+            collectionMode: SocialCapitalCollectionMode.SeparateCollection);
+
+        var paymentEvent = contract.UncommittedEvents.OfType<PaymentApplied>().Last();
+
+        // Assert: full 1000 applied to loan, social capital recorded informatively
+        paymentEvent.SocialCapitalContributed.Amount.Should().Be(500m);
+        paymentEvent.PrincipalPaid.Amount.Should().BeGreaterThan(0m);
+        // Total loan reduction should be based on full 1000, not 500
+        (balanceBefore - contract.State.CurrentBalance.Amount).Should().BeGreaterThan(500m);
+    }
+
+    [Fact]
+    public void ApplyPayment_WithSocialCapital_IncludedInPayment_ShouldDeductFromLoanAmount()
+    {
+        // Arrange
+        var contract = CreateValidContract(principal: 10000m);
+        contract.Disburse("WIRE", "123");
+        var balanceBefore = contract.State.CurrentBalance.Amount;
+
+        var socialCapital = new Money(200m, "USD");
+
+        // Act: 1000 payment, 200 is social capital (IncludedInPayment = loan gets 800)
+        contract.ApplyPayment(Guid.NewGuid(), new Money(1000m, "USD"), PaymentMethod.Wire,
+            socialCapitalContributed: socialCapital,
+            collectionMode: SocialCapitalCollectionMode.IncludedInPayment);
+
+        var paymentEvent = contract.UncommittedEvents.OfType<PaymentApplied>().Last();
+
+        // Assert: social capital recorded; loan principal reduction is based on 800 (less than with SeparateCollection)
+        paymentEvent.SocialCapitalContributed.Amount.Should().Be(200m);
+        (balanceBefore - contract.State.CurrentBalance.Amount).Should().BeLessThan(1000m);
+    }
+
+    [Fact]
+    public void ApplyPayment_WithSocialCapital_ShouldAccumulateTotalSocialCapitalContributed()
+    {
+        // Arrange
+        var contract = CreateValidContract(principal: 10000m);
+        contract.Disburse("WIRE", "123");
+
+        // Act: two payments each with 300 social capital
+        var sc = new Money(300m, "USD");
+        contract.ApplyPayment(Guid.NewGuid(), new Money(1000m, "USD"), PaymentMethod.Wire, socialCapitalContributed: sc);
+        contract.ApplyPayment(Guid.NewGuid(), new Money(1000m, "USD"), PaymentMethod.Wire, socialCapitalContributed: sc);
+
+        // Assert
+        contract.State.TotalSocialCapitalContributed.Amount.Should().Be(600m);
+    }
+
+    [Fact]
+    public void PaymentWaterfall_Default_ShouldPreserveFeesFirst_ThenInterest_ThenPrincipal()
+    {
+        // Arrange
+        var contract = LoanContractAggregate.Create(
+            customerId: Guid.NewGuid(),
+            principal: new Money(10000m, "USD"),
+            rate: new InterestRate(12m),
+            termMonths: 12,
+            amortizationMethod: AmortizationMethod.French,
+            calculator: _calculator,
+            evaluationMetadata: new Dictionary<string, object>(),
+            originationFee: new Money(100m, "USD"));
+
+        contract.Disburse("WIRE", "123");
+        contract.AccrueInterest(DateTime.UtcNow.AddDays(-30), DateTime.UtcNow);
+
+        var feesBefore = contract.State.TotalFees.Amount;    // 100
+        var interestBefore = contract.State.AccruedInterest.Amount;
+
+        // Act: pay just over fees only — 120 (100 fee + 20 interest)
+        contract.ApplyPayment(Guid.NewGuid(), new Money(120m, "USD"), PaymentMethod.Wire,
+            waterfall: PaymentWaterfall.Default);
+
+        // Assert: fees fully consumed first, then interest partially
+        contract.State.TotalFees.Amount.Should().Be(0m);
+        contract.State.AccruedInterest.Amount.Should().Be(interestBefore - 20m);
+    }
+
+    [Fact]
+    public void SocialCapitalConfig_FixedAmount_ShouldReturnConfiguredValue()
+    {
+        var config = new SocialCapitalConfig
+        {
+            CalculationType = SocialCapitalCalculationType.FixedAmount,
+            Value = 500m,
+            CollectionMode = SocialCapitalCollectionMode.SeparateCollection
+        };
+
+        var result = config.Calculate(
+            paymentAmount: new Money(5000m, "CRC"),
+            principalPaid: Money.Zero("CRC"),
+            originalAmount: new Money(100000m, "CRC"),
+            currency: "CRC");
+
+        result.Amount.Should().Be(500m);
+    }
+
+    [Fact]
+    public void SocialCapitalConfig_PercentageOfPayment_ShouldCalculateCorrectly()
+    {
+        var config = new SocialCapitalConfig
+        {
+            CalculationType = SocialCapitalCalculationType.PercentageOfPayment,
+            Value = 2m,  // 2%
+            CollectionMode = SocialCapitalCollectionMode.IncludedInPayment
+        };
+
+        var result = config.Calculate(
+            paymentAmount: new Money(10000m, "CRC"),
+            principalPaid: Money.Zero("CRC"),
+            originalAmount: new Money(500000m, "CRC"),
+            currency: "CRC");
+
+        result.Amount.Should().Be(200m); // 2% of 10000
+    }
+
+    #endregion
 }

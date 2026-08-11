@@ -13,4 +13,5 @@ public class PaymentHistoryReadModel
     public decimal BalanceAfter { get; set; }
     public string? PaymentMethod { get; set; }
     public string Status { get; set; } = "completed";
+    public decimal SocialCapitalContributed { get; set; }
 }

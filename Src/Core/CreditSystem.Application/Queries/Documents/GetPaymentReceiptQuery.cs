@@ -40,7 +40,8 @@ public class GetPaymentReceiptQueryHandler : IRequestHandler<GetPaymentReceiptQu
             InterestApplied = payment.InterestPaid,
             FeesApplied = payment.FeesPaid > 0 ? payment.FeesPaid : null,
             TotalPaid = payment.TotalAmount,
-            RemainingBalance = payment.BalanceAfter
+            RemainingBalance = payment.BalanceAfter,
+            SocialCapitalContributed = payment.SocialCapitalContributed > 0 ? payment.SocialCapitalContributed : null
         };
 
         return await _documentGenerator.GenerateAsync(

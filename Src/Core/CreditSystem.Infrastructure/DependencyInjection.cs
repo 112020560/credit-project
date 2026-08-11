@@ -1,4 +1,5 @@
 using CreditSystem.Application.Configuration;
+using CreditSystem.Infrastructure.Members;
 using CreditSystem.Application.Job;
 using CreditSystem.Domain.Abstractions;
 using CreditSystem.Domain.Abstractions.Documents;
@@ -81,6 +82,7 @@ public static class DependencyInjection
             new RevolvingCreditQueryService(connectionString));
         services.AddScoped<IProjection, RevolvingCreditSummaryProjector>();
         services.AddScoped<IProjection, PaymentTrackingProjector>();
+        services.AddScoped<IProjection, SocialCapitalProjector>();
 
         return services;
     }
@@ -198,13 +200,19 @@ public static class DependencyInjection
         services.AddScoped<ICustomerCreditProfileRepository, CustomerCreditProfileRepository>();
         services.AddScoped<ICooperativeMemberRepository>(sp =>
             new CooperativeMemberRepository(configuration.GetConnectionString("CreditDb")!));
+
+        services.Configure<MemberNumberFormatOptions>(
+            configuration.GetSection(MemberNumberFormatOptions.SectionName));
+        services.AddScoped<IMemberNumberGenerator>(sp =>
+            new DefaultMemberNumberGenerator(
+                configuration.GetConnectionString("CreditDb")!,
+                sp.GetRequiredService<IOptions<MemberNumberFormatOptions>>()));
         
         services.AddMassTransit(x =>
         {
             // Customer event consumers
             x.AddConsumer<CustomerCreatedConsumer>();
             x.AddConsumer<CustomerUpdatedConsumer>();
-            x.AddConsumer<MemberSyncedConsumer>();
 
             // Async payment consumers
             x.AddConsumer<ProcessPaymentConsumer>();
@@ -219,7 +227,6 @@ public static class DependencyInjection
                 {
                     e.ConfigureConsumer<CustomerCreatedConsumer>(context);
                     e.ConfigureConsumer<CustomerUpdatedConsumer>(context);
-                    e.ConfigureConsumer<MemberSyncedConsumer>(context);
                 });
 
                 // Async payment processing endpoint

@@ -7,6 +7,7 @@ public record LoanContractState
 {
     public Guid Id { get; init; }
     public Guid CustomerId { get; init; }
+    public Guid? ProductId { get; init; }
     public ContractStatus Status { get; init; }
     public Money Principal { get; init; }
     public Money CurrentBalance { get; init; }
@@ -27,6 +28,7 @@ public record LoanContractState
     public DateTime? DisbursedAt { get; init; }
     public DateTime? DefaultedAt { get; init; }
     public DateTime? PaidOffAt { get; init; }
+    public Money TotalSocialCapitalContributed { get; init; }
     public int Version { get; init; }
     public DateTime? LastInterestAccrualDate { get; init; }
     public AmortizationMethod AmortizationMethod { get; init; }
@@ -43,6 +45,7 @@ public record LoanContractState
         AccruedPenaltyInterest = Money.Zero(),
         TotalFees = Money.Zero(),
         OriginationFee = Money.Zero(),
+        TotalSocialCapitalContributed = Money.Zero(),
         PaymentsMade = 0,
         PaymentsMissed = 0,
         Version = 0

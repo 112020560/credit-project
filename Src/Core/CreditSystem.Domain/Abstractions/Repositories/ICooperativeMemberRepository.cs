@@ -15,4 +15,6 @@ public interface ICooperativeMemberRepository
         DateTime joinedAt,
         MemberShare shares,
         CancellationToken ct = default);
+
+    Task<decimal?> GetSocialCapitalBalanceAsync(Guid externalId, CancellationToken ct = default);
 }

@@ -3,6 +3,7 @@ using CreditSystem.Domain.Entities;
 using CreditSystem.Domain.Enums;
 using CreditSystem.Domain.ValueObjects;
 using Microsoft.AspNetCore.Mvc;
+using PaymentWaterfall = CreditSystem.Domain.ValueObjects.PaymentWaterfall;
 
 namespace CreditSystem.Api.EndPoints;
 
@@ -70,13 +71,33 @@ public static class ProductEndpoints
         var limits = new ProductLimits(request.MinAmount, request.MaxAmount, request.MinTermMonths, request.MaxTermMonths);
         var rates = new ProductRates(request.BaseInterestRate, request.MaxLtv);
 
+        PaymentWaterfall? waterfall = null;
+        if (request.Waterfall is { Count: > 0 })
+        {
+            waterfall = new PaymentWaterfall(
+                request.Waterfall.Select(s => new PaymentWaterfallStep(s.Priority, s.Component)));
+        }
+
+        SocialCapitalConfig? socialCapitalConfig = null;
+        if (request.SocialCapitalConfig != null)
+        {
+            socialCapitalConfig = new SocialCapitalConfig
+            {
+                CalculationType = request.SocialCapitalConfig.CalculationType,
+                Value = request.SocialCapitalConfig.Value,
+                CollectionMode = request.SocialCapitalConfig.CollectionMode
+            };
+        }
+
         var product = new CreditProduct(
             Guid.NewGuid(),
             request.Name,
             limits,
             rates,
             request.DefaultAmortizationMethod,
-            request.RequiresCollateral);
+            request.RequiresCollateral,
+            waterfall: waterfall,
+            socialCapitalConfig: socialCapitalConfig);
 
         await repository.InsertAsync(product, cancellationToken);
 
@@ -107,8 +128,22 @@ public static class ProductEndpoints
         p.Rates.MaxLtv,
         p.DefaultAmortizationMethod.ToString(),
         p.RequiresCollateral,
-        p.Status.ToString());
+        p.Status.ToString(),
+        p.Waterfall.Steps.Select(s => new WaterfallStepRequest(s.Priority, s.Component)).ToList(),
+        p.SocialCapitalConfig != null
+            ? new SocialCapitalConfigRequest(
+                p.SocialCapitalConfig.CalculationType,
+                p.SocialCapitalConfig.Value,
+                p.SocialCapitalConfig.CollectionMode)
+            : null);
 }
+
+public record WaterfallStepRequest(int Priority, PaymentComponent Component);
+
+public record SocialCapitalConfigRequest(
+    SocialCapitalCalculationType CalculationType,
+    decimal Value,
+    SocialCapitalCollectionMode CollectionMode);
 
 public record CreateProductRequest(
     string Name,
@@ -119,7 +154,9 @@ public record CreateProductRequest(
     decimal? BaseInterestRate,
     decimal? MaxLtv,
     AmortizationMethod DefaultAmortizationMethod,
-    bool RequiresCollateral);
+    bool RequiresCollateral,
+    List<WaterfallStepRequest>? Waterfall = null,
+    SocialCapitalConfigRequest? SocialCapitalConfig = null);
 
 public record UpdateProductStatusRequest(ProductStatus Status);
 
@@ -134,4 +171,6 @@ public record ProductResponse(
     decimal? MaxLtv,
     string DefaultAmortizationMethod,
     bool RequiresCollateral,
-    string Status);
+    string Status,
+    IReadOnlyList<WaterfallStepRequest> Waterfall,
+    SocialCapitalConfigRequest? SocialCapitalConfig);
