@@ -1,0 +1,20 @@
+TABLA DE AMORTIZACIÓN
+===========================================
+Préstamo #:    {{ loannumber }}
+Cliente:       {{ customername }}
+Monto orig.:   {{ originalamount | math.round 2 }} {{ currency }}
+Tasa anual:    {{ interestrate | math.round 4 }}%
+Plazo:         {{ termmonths }} meses
+Generado:      {{ generatedat | date.to_string "%d/%m/%Y %H:%M" }}
+===========================================
+
+ N° | Fecha      | Cuota       | Interés     | Capital     | Saldo
+----|------------|-------------|-------------|-------------|-------------
+{{ for row in rows }} {{ row.entrynumber | string.pad_left 3 }} | {{ row.duedate | date.to_string "%d/%m/%Y" }} | {{ row.payment | math.round 2 | string.pad_left 11 }} | {{ row.interest | math.round 2 | string.pad_left 11 }} | {{ row.principal | math.round 2 | string.pad_left 11 }} | {{ row.remainingbalance | math.round 2 | string.pad_left 11 }}
+{{ end }}
+----|------------|-------------|-------------|-------------|-------------
+TOT |            | {{ totalpayment | math.round 2 | string.pad_left 11 }} | {{ totalinterest | math.round 2 | string.pad_left 11 }} | {{ totalprincipal | math.round 2 | string.pad_left 11 }} |
+
+===========================================
+Todos los montos expresados en {{ currency }}.
+===========================================

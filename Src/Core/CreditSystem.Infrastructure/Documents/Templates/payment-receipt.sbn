@@ -1,0 +1,24 @@
+COMPROBANTE DE PAGO
+===========================================
+Fecha:       {{ paymentdate | date.to_string "%d/%m/%Y %H:%M" }}
+Préstamo #:  {{ loannumber }}
+Cliente:     {{ customername }}
+Moneda:      {{ currency }}
+
+-------------------------------------------
+DESGLOSE DEL PAGO
+-------------------------------------------
+Capital aplicado:    {{ principalapplied | math.round 2 }}
+Intereses aplicados: {{ interestapplied | math.round 2 }}
+{{ if feesapplied && feesapplied > 0 }}Comisiones:          {{ feesapplied | math.round 2 }}
+{{ end }}{{ if socialcapitalcontributed && socialcapitalcontributed > 0 }}Capital social:      {{ socialcapitalcontributed | math.round 2 }}
+{{ end }}-------------------------------------------
+TOTAL PAGADO:        {{ totalpaid | math.round 2 }} {{ currency }}
+-------------------------------------------
+
+Saldo restante:      {{ remainingbalance | math.round 2 }} {{ currency }}
+
+===========================================
+Este comprobante es un documento oficial.
+Consérvelo para sus registros.
+===========================================

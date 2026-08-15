@@ -1,0 +1,53 @@
+using CreditSystem.Domain.Abstractions.Repositories;
+using CreditSystem.Domain.Exceptions;
+using MediatR;
+using Microsoft.Extensions.Logging;
+
+namespace CreditSystem.Application.Commands.RevolvingCredit.FreezeCreditLine;
+
+public class FreezeCreditLineCommandHandler : IRequestHandler<FreezeCreditLineCommand, FreezeCreditLineResponse>
+{
+    private readonly IRevolvingCreditRepository _repository;
+    private readonly ILogger<FreezeCreditLineCommandHandler> _logger;
+
+    public FreezeCreditLineCommandHandler(
+        IRevolvingCreditRepository repository,
+        ILogger<FreezeCreditLineCommandHandler> logger)
+    {
+        _repository = repository;
+        _logger = logger;
+    }
+
+    public async Task<FreezeCreditLineResponse> Handle(
+        FreezeCreditLineCommand request,
+        CancellationToken cancellationToken)
+    {
+        var aggregate = await _repository.GetByIdAsync(request.CreditLineId, cancellationToken);
+
+        if (aggregate == null)
+        {
+            _logger.LogWarning("Credit line {CreditLineId} not found", request.CreditLineId);
+            return FreezeCreditLineResponse.Failed($"Credit line {request.CreditLineId} not found");
+        }
+
+        try
+        {
+            aggregate.Freeze(request.Reason);
+        }
+        catch (DomainException ex)
+        {
+            _logger.LogWarning("Cannot freeze credit line {CreditLineId}: {Error}",
+                request.CreditLineId, ex.Message);
+            return FreezeCreditLineResponse.Failed(ex.Message);
+        }
+
+        await _repository.SaveAsync(aggregate, cancellationToken);
+
+        _logger.LogInformation("Credit line {CreditLineId} frozen. Reason: {Reason}",
+            request.CreditLineId, request.Reason);
+
+        return FreezeCreditLineResponse.Frozen(
+            aggregate.Id,
+            aggregate.State.FrozenAt!.Value);
+    }
+}

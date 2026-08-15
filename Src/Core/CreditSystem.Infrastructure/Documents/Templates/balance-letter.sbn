@@ -1,0 +1,41 @@
+CARTA DE SALDO
+===========================================
+Fecha de emisión: {{ issuedat | date.to_string "%d/%m/%Y" }}
+
+A quien corresponda:
+
+Por medio de la presente se certifica que el cliente:
+
+  Nombre:     {{ customername }}
+
+Mantiene un préstamo con las siguientes condiciones:
+
+-------------------------------------------
+INFORMACIÓN DEL PRÉSTAMO
+-------------------------------------------
+Número de préstamo:   {{ loannumber }}
+Fecha de desembolso:  {{ disbursementdate | date.to_string "%d/%m/%Y" }}
+Monto original:       {{ originalamount | math.round 2 }} {{ currency }}
+Saldo actual:         {{ currentbalance | math.round 2 }} {{ currency }}
+Estado:               {{ status }}
+
+-------------------------------------------
+CONDICIONES DE TASA
+-------------------------------------------
+Tipo de tasa:         {{ ratetype }}
+Tasa de interés:      {{ interestrate | math.round 4 }}%
+{{ if ratetype == "Variable" }}Spread:               {{ spread | math.round 4 }}%
+Tasa de referencia:   {{ referencrateid }}
+{{ end }}
+-------------------------------------------
+PRÓXIMO PAGO
+-------------------------------------------
+{{ if nextpaymentdate }}Fecha próximo pago:   {{ nextpaymentdate | date.to_string "%d/%m/%Y" }}
+Monto próxima cuota:  {{ nextpaymentamount | math.round 2 }} {{ currency }}
+{{ else }}Sin pagos pendientes próximos.
+{{ end }}{{ if maturitydate }}Fecha de vencimiento: {{ maturitydate | date.to_string "%d/%m/%Y" }}
+{{ end }}
+===========================================
+NOTA: Esta carta tiene vigencia de 30 días
+a partir de la fecha de emisión indicada.
+===========================================
