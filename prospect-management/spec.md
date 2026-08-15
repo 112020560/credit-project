@@ -9,7 +9,7 @@ The system SHALL allow creating a Prospect with only identification, full name, 
 
 #### Scenario: Successful prospect creation
 - **WHEN** a valid `POST /api/v1/prospects` request is received with IdentificationType, IdentificationNumber, FullName, and at least one contact
-- **THEN** a Prospect is persisted with Status `Draft` and a `ProspectCreated` event is published
+- **THEN** a Prospect is persisted with Status `Draft` and a `ProspectCreated` outbox event is persisted to `outbox_db` via `IOutboxWriter.AppendAsync()`. The `outbox-worker` delivers it to RabbitMQ asynchronously.
 
 #### Scenario: Duplicate identification rejected
 - **WHEN** a `POST /api/v1/prospects` is received with an IdentificationNumber that already exists (regardless of Status)
