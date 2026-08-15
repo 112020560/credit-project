@@ -21,9 +21,9 @@ public static class DependencyInjection
     {
         services.AddScoped<IContractRule, MemberSharesRule>();
         services.AddScoped<IContractRule, ProductEligibilityRule>();
-        services.AddScoped<IContractRule, MaxLoanAmountRule>();
         services.AddScoped<IContractRule, CreditScoreRule>();
         services.AddScoped<IContractRule, DebtToIncomeRule>();
+        services.AddScoped<IContractRule, PaymentCapacityRule>();
         services.AddScoped<IContractRule, CollateralRule>();
         services.AddScoped<IContractRule, ActiveLoansRule>();
         services.AddScoped<ContractEngine>();

@@ -1,4 +1,3 @@
-using CreditSystem.Domain.Abstractions.Projections;
 using CreditSystem.Domain.Abstractions.Repositories;
 using CreditSystem.Domain.Exceptions;
 using MediatR;
@@ -9,16 +8,13 @@ namespace CreditSystem.Application.Commands.RevolvingCredit.ActivateCreditLine;
 public class ActivateCreditLineCommandHandler : IRequestHandler<ActivateCreditLineCommand, ActivateCreditLineResponse>
 {
     private readonly IRevolvingCreditRepository _repository;
-    private readonly IProjectionEngine _projectionEngine;
     private readonly ILogger<ActivateCreditLineCommandHandler> _logger;
 
     public ActivateCreditLineCommandHandler(
         IRevolvingCreditRepository repository,
-        IProjectionEngine projectionEngine,
         ILogger<ActivateCreditLineCommandHandler> logger)
     {
         _repository = repository;
-        _projectionEngine = projectionEngine;
         _logger = logger;
     }
 
@@ -45,20 +41,7 @@ public class ActivateCreditLineCommandHandler : IRequestHandler<ActivateCreditLi
             return ActivateCreditLineResponse.Failed(ex.Message);
         }
 
-        var events = aggregate.UncommittedEvents.ToList();
         await _repository.SaveAsync(aggregate, cancellationToken);
-
-        // Proyectar a Read Models
-        try
-        {
-            await _projectionEngine.ProjectEventsAsync(events, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex,
-                "Failed to project events for credit line {CreditLineId}. Read models can be rebuilt.",
-                aggregate.Id);
-        }
 
         _logger.LogInformation("Credit line {CreditLineId} activated", request.CreditLineId);
 

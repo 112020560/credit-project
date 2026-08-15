@@ -28,9 +28,10 @@ public class RateAdjustmentTests
             calculator: _calculator,
             evaluationMetadata: new Dictionary<string, object>());
 
-        // Disburse to make it Active
+        // Disburse and confirm to make it Active
         aggregate.ClearUncommittedEvents();
         aggregate.Disburse("Transfer", "CR12345");
+        aggregate.ConfirmDisbursement("test");
         aggregate.ClearUncommittedEvents();
         return aggregate;
     }

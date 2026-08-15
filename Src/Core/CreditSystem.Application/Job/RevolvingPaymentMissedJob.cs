@@ -1,5 +1,4 @@
 using CreditSystem.Application.Configuration;
-using CreditSystem.Domain.Abstractions.Projections;
 using CreditSystem.Domain.Abstractions.Repositories;
 using CreditSystem.Domain.Abstractions.Services;
 using CreditSystem.Domain.Aggregates.RevolvingCredit;
@@ -15,20 +14,17 @@ public class RevolvingPaymentMissedJob : IRevolvingPaymentMissedJob
 {
     private readonly IRevolvingCreditQueryService _queryService;
     private readonly IRevolvingCreditRepository _repository;
-    private readonly IProjectionEngine _projectionEngine;
     private readonly ILogger<RevolvingPaymentMissedJob> _logger;
     private readonly RevolvingLateFeeConfiguration _config;
 
     public RevolvingPaymentMissedJob(
         IRevolvingCreditQueryService queryService,
         IRevolvingCreditRepository repository,
-        IProjectionEngine projectionEngine,
         IOptions<RevolvingLateFeeConfiguration> config,
         ILogger<RevolvingPaymentMissedJob> logger)
     {
         _queryService = queryService;
         _repository = repository;
-        _projectionEngine = projectionEngine;
         _config = config.Value;
         _logger = logger;
     }
@@ -95,13 +91,7 @@ public class RevolvingPaymentMissedJob : IRevolvingPaymentMissedJob
             {
                 aggregate.Freeze($"Payment overdue by {daysOverdue} days");
 
-                var events = aggregate.UncommittedEvents.ToList();
                 await _repository.SaveAsync(aggregate, cancellationToken);
-
-                foreach (var @event in events)
-                {
-                    await _projectionEngine.ProjectEventAsync(@event, cancellationToken);
-                }
 
                 _logger.LogWarning(
                     "Credit line {CreditLineId} frozen due to {DaysOverdue} days overdue",

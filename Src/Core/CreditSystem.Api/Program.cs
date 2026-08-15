@@ -34,7 +34,8 @@ var creditDbConnectionString = builder.Configuration.GetConnectionString("Credit
 builder.Services.AddHealthChecks()
     .AddNpgSql(creditDbConnectionString, name: "postgres")
     .AddCheck<UnderwritingPolicyHealthCheck>("underwriting-policy")
-    .AddCheck<RabbitMqHealthCheck>("rabbitmq");
+    .AddCheck<RabbitMqHealthCheck>("rabbitmq")
+    .AddCheck<ProjectionHealthCheck>("projection-health");
 
 //builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
@@ -59,6 +60,16 @@ builder.Services.AddSwaggerGen(c =>
 
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
+
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+});
+
+builder.Services.Configure<Microsoft.AspNetCore.Mvc.JsonOptions>(options =>
+{
+    options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+});
 
 var app = builder.Build();
 
@@ -95,6 +106,8 @@ v1.MapWebhooksEndpoints();
 v1.MapRiskEndpoints();
 v1.MapReferenceRateEndpoints();
 v1.MapDocumentEndpoints();
+v1.MapUnderwritingPolicyEndpoints();
+v1.MapProjectionAdminEndpoints();
 
 // Health endpoints (outside versioned group — framework-level probes)
 app.MapHealthChecks("/health", new HealthCheckOptions

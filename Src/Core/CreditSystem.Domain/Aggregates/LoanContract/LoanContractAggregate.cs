@@ -90,6 +90,30 @@ public class LoanContractAggregate
         }, isNew: true);
     }
 
+    public void ConfirmDisbursement(string confirmedBy)
+    {
+        EnsureStatus(ContractStatus.Disbursing, "Cannot confirm disbursement");
+
+        Apply(new DisbursementConfirmed
+        {
+            AggregateId = Id,
+            ConfirmedBy = confirmedBy,
+            DisbursedAt = DateTime.UtcNow
+        }, isNew: true);
+    }
+
+    public void FailDisbursement(string reason)
+    {
+        EnsureStatus(ContractStatus.Disbursing, "Cannot fail disbursement");
+
+        Apply(new DisbursementFailed
+        {
+            AggregateId = Id,
+            Reason = reason,
+            FailedAt = DateTime.UtcNow
+        }, isNew: true);
+    }
+
     public void AccrueInterest(DateTime periodStart, DateTime periodEnd)
     {
         EnsureStatus(ContractStatus.Active, "Cannot accrue interest");
@@ -336,18 +360,33 @@ public class LoanContractAggregate
                 Schedule = e.Schedule,
                 TotalFees = e.OriginationFee,
                 OriginationFee = e.OriginationFee,
+                AccruedInterest = Money.Zero(e.Principal.Currency),
                 AccruedPenaltyInterest = Money.Zero(e.Principal.Currency),
+                TotalSocialCapitalContributed = Money.Zero(e.Principal.Currency),
                 Status = ContractStatus.Approved,
                 NextPaymentDue = e.Schedule.Entries.FirstOrDefault()?.DueDate,
                 Version = state.Version + 1
             },
 
-            ContractApproved => state,
+            ContractApproved => state with { Version = state.Version + 1 },
 
             LoanDisbursed e => state with
             {
-                Status = ContractStatus.Active,
+                Status = ContractStatus.Disbursing,
                 DisbursedAt = e.DisbursedAt,
+                Version = state.Version + 1
+            },
+
+            DisbursementConfirmed e => state with
+            {
+                Status = ContractStatus.Active,
+                Version = state.Version + 1
+            },
+
+            DisbursementFailed => state with
+            {
+                Status = ContractStatus.Approved,
+                DisbursedAt = null,
                 Version = state.Version + 1
             },
 

@@ -95,7 +95,7 @@ public class LoanContractAggregateTests
     #region Disburse Tests
 
     [Fact]
-    public void Disburse_WhenApproved_ShouldChangeStatusToActive()
+    public void Disburse_WhenApproved_ShouldChangeStatusToDisbursing()
     {
         // Arrange
         var contract = CreateValidContract();
@@ -104,7 +104,7 @@ public class LoanContractAggregateTests
         contract.Disburse("WIRE", "1234567890");
 
         // Assert
-        contract.State.Status.Should().Be(ContractStatus.Active);
+        contract.State.Status.Should().Be(ContractStatus.Disbursing);
         contract.State.DisbursedAt.Should().NotBeNull();
     }
 
@@ -147,6 +147,7 @@ public class LoanContractAggregateTests
         // Arrange
         var contract = CreateValidContract(principal: 10000m, rate: 36.5m); // 0.1% daily
         contract.Disburse("WIRE", "123");
+        contract.ConfirmDisbursement("test");
         var start = DateTime.UtcNow.AddDays(-10);
         var end = DateTime.UtcNow;
 
@@ -182,6 +183,7 @@ public class LoanContractAggregateTests
         // Arrange
         var contract = CreateValidContract(principal: 10000m);
         contract.Disburse("WIRE", "123");
+        contract.ConfirmDisbursement("test");
         var initialBalance = contract.State.CurrentBalance.Amount;
         var paymentAmount = 1000m;
 
@@ -198,6 +200,7 @@ public class LoanContractAggregateTests
         // Arrange
         var contract = CreateValidContract();
         contract.Disburse("WIRE", "123");
+        contract.ConfirmDisbursement("test");
 
         // Act
         contract.ApplyPayment(Guid.NewGuid(), new Money(500m, "USD"), PaymentMethod.Wire);
@@ -212,6 +215,7 @@ public class LoanContractAggregateTests
         // Arrange
         var contract = CreateValidContract(principal: 10000m);
         contract.Disburse("WIRE", "123");
+        contract.ConfirmDisbursement("test");
         // Simulate a missed payment to generate fees
         contract.RecordMissedPayment(1, DateTime.UtcNow.AddDays(-35), new Money(50m, "USD"));
 
@@ -230,6 +234,7 @@ public class LoanContractAggregateTests
         // Arrange
         var contract = CreateValidContract(principal: 1000m, rate: 0, termMonths: 1);
         contract.Disburse("WIRE", "123");
+        contract.ConfirmDisbursement("test");
 
         // Act
         contract.ApplyPayment(Guid.NewGuid(), new Money(1000m, "USD"), PaymentMethod.Wire);
@@ -246,6 +251,7 @@ public class LoanContractAggregateTests
         // Arrange
         var contract = CreateValidContract();
         contract.Disburse("WIRE", "123");
+        contract.ConfirmDisbursement("test");
 
         // Act
         var act = () => contract.ApplyPayment(
@@ -285,6 +291,7 @@ public class LoanContractAggregateTests
         // Arrange
         var contract = CreateValidContract();
         contract.Disburse("WIRE", "123");
+        contract.ConfirmDisbursement("test");
 
         // Act
         contract.RecordMissedPayment(1, DateTime.UtcNow.AddDays(-35), new Money(25m, "USD"));
@@ -299,6 +306,7 @@ public class LoanContractAggregateTests
         // Arrange
         var contract = CreateValidContract();
         contract.Disburse("WIRE", "123");
+        contract.ConfirmDisbursement("test");
 
         // Act
         contract.RecordMissedPayment(1, DateTime.UtcNow.AddDays(-35), new Money(25m, "USD"));
@@ -313,6 +321,7 @@ public class LoanContractAggregateTests
         // Arrange
         var contract = CreateValidContract();
         contract.Disburse("WIRE", "123");
+        contract.ConfirmDisbursement("test");
         var lateFee = 50m;
 
         // Act
@@ -328,6 +337,7 @@ public class LoanContractAggregateTests
         // Arrange
         var contract = CreateValidContract();
         contract.Disburse("WIRE", "123");
+        contract.ConfirmDisbursement("test");
 
         // Act
         contract.RecordMissedPayment(1, DateTime.UtcNow.AddDays(-91), new Money(25m, "USD"));
@@ -346,6 +356,7 @@ public class LoanContractAggregateTests
         // Arrange
         var contract = CreateValidContract();
         contract.Disburse("WIRE", "123");
+        contract.ConfirmDisbursement("test");
 
         // Act
         contract.MarkAsDefault("Customer bankruptcy");
@@ -361,6 +372,7 @@ public class LoanContractAggregateTests
         // Arrange
         var contract = CreateValidContract();
         contract.Disburse("WIRE", "123");
+        contract.ConfirmDisbursement("test");
         contract.MarkAsDefault("First default");
         var eventCountAfterFirst = contract.UncommittedEvents.Count;
 
@@ -381,6 +393,7 @@ public class LoanContractAggregateTests
         // Arrange
         var contract = CreateValidContract(principal: 10000m, rate: 18m, termMonths: 12);
         contract.Disburse("WIRE", "123");
+        contract.ConfirmDisbursement("test");
         contract.RecordMissedPayment(1, DateTime.UtcNow.AddDays(-35), new Money(25m, "USD"));
         // Now it's Delinquent
 
@@ -403,6 +416,7 @@ public class LoanContractAggregateTests
         // Arrange
         var contract = CreateValidContract(principal: 10000m);
         contract.Disburse("WIRE", "123");
+        contract.ConfirmDisbursement("test");
         contract.RecordMissedPayment(1, DateTime.UtcNow.AddDays(-35), new Money(25m, "USD"));
         var balanceBefore = contract.State.CurrentBalance.Amount;
         var forgiveAmount = 2000m;
@@ -424,6 +438,7 @@ public class LoanContractAggregateTests
         // Arrange
         var contract = CreateValidContract();
         contract.Disburse("WIRE", "123");
+        contract.ConfirmDisbursement("test");
         contract.RecordMissedPayment(1, DateTime.UtcNow.AddDays(-35), new Money(25m, "USD"));
         contract.State.Status.Should().Be(ContractStatus.Delinquent);
 
@@ -445,6 +460,7 @@ public class LoanContractAggregateTests
         // Arrange
         var contract = CreateValidContract();
         contract.Disburse("WIRE", "123");
+        contract.ConfirmDisbursement("test");
         // Status is Active
 
         // Act

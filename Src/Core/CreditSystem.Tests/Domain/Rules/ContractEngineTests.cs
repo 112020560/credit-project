@@ -12,12 +12,13 @@ public class ContractEngineTests
     private static UnderwritingPolicy DefaultPolicy(decimal baseRate = 8.0m) =>
         new(baseRate, 90, NoScoreBehavior.ApproveWithPenalty, 5, false);
 
-    private static ContractEvaluationContext BuildContext(decimal amount = 100_000m) =>
+    private static ContractEvaluationContext BuildContext(decimal amount = 100_000m, decimal policyBaseRate = 8.0m) =>
         new()
         {
             Customer = CustomerCreditProfile.Create(Guid.NewGuid(), "Test User", "CC", "123456"),
             RequestedAmount = new Money(amount, "CRC"),
-            TermMonths = 12
+            TermMonths = 12,
+            Policy = DefaultPolicy(policyBaseRate)
         };
 
     // A rule that always passes with no rate adjustment
@@ -33,8 +34,8 @@ public class ContractEngineTests
     public async Task EvaluateAsync_WithoutBaseRateParam_UsesPolicy()
     {
         // Policy base rate = 8%, no rules add adjustments
-        var engine = new ContractEngine([new PassRule()], DefaultPolicy(baseRate: 8.0m));
-        var context = BuildContext();
+        var engine = new ContractEngine([new PassRule()]);
+        var context = BuildContext(policyBaseRate: 8.0m);
 
         var result = await engine.EvaluateAsync(context);
 
@@ -46,8 +47,8 @@ public class ContractEngineTests
     public async Task EvaluateAsync_WithProductBaseRate_OverridesPolicyRate()
     {
         // Policy base rate = 8%, product base rate = 14%
-        var engine = new ContractEngine([new PassRule()], DefaultPolicy(baseRate: 8.0m));
-        var context = BuildContext();
+        var engine = new ContractEngine([new PassRule()]);
+        var context = BuildContext(policyBaseRate: 8.0m);
 
         var result = await engine.EvaluateAsync(context, baseInterestRate: 14.0m);
 
@@ -58,8 +59,8 @@ public class ContractEngineTests
     [Fact]
     public async Task EvaluateAsync_WithNullBaseRate_FallsBackToPolicy()
     {
-        var engine = new ContractEngine([new PassRule()], DefaultPolicy(baseRate: 9.0m));
-        var context = BuildContext();
+        var engine = new ContractEngine([new PassRule()]);
+        var context = BuildContext(policyBaseRate: 9.0m);
 
         var result = await engine.EvaluateAsync(context, baseInterestRate: null);
 
@@ -72,8 +73,8 @@ public class ContractEngineTests
     {
         // Product base = 12%, rule adds +2% → final = 14%
         var ruleWithAdjustment = new RateAdjustmentRule(2.0m);
-        var engine = new ContractEngine([ruleWithAdjustment], DefaultPolicy(baseRate: 8.0m));
-        var context = BuildContext();
+        var engine = new ContractEngine([ruleWithAdjustment]);
+        var context = BuildContext(policyBaseRate: 8.0m);
 
         var result = await engine.EvaluateAsync(context, baseInterestRate: 12.0m);
 

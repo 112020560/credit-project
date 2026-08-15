@@ -58,6 +58,7 @@ public class E2EFixture
             {
                 await conn.ExecuteAsync("DELETE FROM rm_payment_history WHERE loan_id = ANY(@Ids)", new { Ids = ids });
                 await conn.ExecuteAsync("DELETE FROM rm_loan_summaries WHERE loan_id = ANY(@Ids)", new { Ids = ids });
+                await conn.ExecuteAsync("DELETE FROM event_outbox WHERE event_id IN (SELECT id FROM stored_events WHERE stream_id = ANY(@Ids))", new { Ids = ids });
                 await conn.ExecuteAsync("DELETE FROM stored_events WHERE stream_id = ANY(@Ids)", new { Ids = ids });
                 await conn.ExecuteAsync("DELETE FROM event_streams WHERE stream_id = ANY(@Ids)", new { Ids = ids });
             }

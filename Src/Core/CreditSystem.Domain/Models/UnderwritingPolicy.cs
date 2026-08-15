@@ -10,4 +10,7 @@ public record UnderwritingPolicy(
     bool RequireActiveMembership = false,
     int GracePeriodDays = 5,
     decimal PenaltyRate = 0m,
-    decimal OriginationFeeRate = 0m);
+    decimal OriginationFeeRate = 0m,
+    bool EnforceSharesCapacityLimit = false,
+    decimal MaxDtiRatio = 0.50m,
+    string Id = "default");

@@ -38,6 +38,7 @@ public class RateAdjustmentJobTests
             evaluationMetadata: new Dictionary<string, object>());
         aggregate.ClearUncommittedEvents();
         aggregate.Disburse("Transfer", "CR12345");
+        aggregate.ConfirmDisbursement("test");
         aggregate.ClearUncommittedEvents();
         return aggregate;
     }

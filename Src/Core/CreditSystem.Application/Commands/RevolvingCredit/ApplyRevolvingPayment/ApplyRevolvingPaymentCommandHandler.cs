@@ -1,4 +1,3 @@
-using CreditSystem.Domain.Abstractions.Projections;
 using CreditSystem.Domain.Abstractions.Repositories;
 using CreditSystem.Domain.Aggregates.RevolvingCredit.Events;
 using CreditSystem.Domain.Enums;
@@ -12,16 +11,13 @@ namespace CreditSystem.Application.Commands.RevolvingCredit.ApplyRevolvingPaymen
 public class ApplyRevolvingPaymentCommandHandler : IRequestHandler<ApplyRevolvingPaymentCommand, ApplyRevolvingPaymentResponse>
 {
     private readonly IRevolvingCreditRepository _repository;
-    private readonly IProjectionEngine _projectionEngine;
     private readonly ILogger<ApplyRevolvingPaymentCommandHandler> _logger;
 
     public ApplyRevolvingPaymentCommandHandler(
         IRevolvingCreditRepository repository,
-        IProjectionEngine projectionEngine,
         ILogger<ApplyRevolvingPaymentCommandHandler> logger)
     {
         _repository = repository;
-        _projectionEngine = projectionEngine;
         _logger = logger;
     }
 
@@ -62,20 +58,7 @@ public class ApplyRevolvingPaymentCommandHandler : IRequestHandler<ApplyRevolvin
             .OfType<RevolvingPaymentApplied>()
             .First();
 
-        var events = aggregate.UncommittedEvents.ToList();
         await _repository.SaveAsync(aggregate, cancellationToken);
-
-        // Proyectar a Read Models
-        try
-        {
-            await _projectionEngine.ProjectEventsAsync(events, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex,
-                "Failed to project events for credit line {CreditLineId}. Read models can be rebuilt.",
-                aggregate.Id);
-        }
 
         _logger.LogInformation(
             "Payment {PaymentId} of {Amount} applied to credit line {CreditLineId}. New balance: {Balance}",

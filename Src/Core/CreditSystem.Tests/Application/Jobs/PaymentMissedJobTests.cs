@@ -1,7 +1,7 @@
 using CreditSystem.Application.Configuration;
 using CreditSystem.Application.Job;
 using CreditSystem.Domain.Abstractions;
-using CreditSystem.Domain.Abstractions.Projections;
+using CreditSystem.Domain.Abstractions.Repositories;
 using CreditSystem.Domain.Abstractions.Services;
 using CreditSystem.Domain.Aggregates.LoanContract;
 using CreditSystem.Domain.Aggregates.LoanContract.Events;
@@ -21,7 +21,7 @@ public class PaymentMissedJobTests
 {
     private readonly ILoanQueryService _queryService = Substitute.For<ILoanQueryService>();
     private readonly ILoanContractRepository _repository = Substitute.For<ILoanContractRepository>();
-    private readonly IProjectionEngine _projectionEngine = Substitute.For<IProjectionEngine>();
+    private readonly IUnderwritingPolicyRepository _policyRepo = Substitute.For<IUnderwritingPolicyRepository>();
     private readonly FrenchAmortizationCalculator _calculator = new();
 
     private readonly LateFeeConfiguration _lateFeeConfig = new()
@@ -34,13 +34,13 @@ public class PaymentMissedJobTests
 
     private PaymentMissedJob CreateJob(UnderwritingPolicy policy)
     {
+        _policyRepo.GetActiveAsync(Arg.Any<CancellationToken>()).Returns(policy);
         return new PaymentMissedJob(
             _queryService,
             _repository,
-            _projectionEngine,
             Options.Create(_lateFeeConfig),
             NullLogger<PaymentMissedJob>.Instance,
-            policy);
+            _policyRepo);
     }
 
     private LoanContractAggregate CreateActiveAggregate(decimal principal = 10000m)
@@ -55,6 +55,7 @@ public class PaymentMissedJobTests
             evaluationMetadata: new Dictionary<string, object>());
 
         aggregate.Disburse("WIRE", "123");
+        aggregate.ConfirmDisbursement("test");
         aggregate.ClearUncommittedEvents();
         return aggregate;
     }

@@ -9,7 +9,6 @@ using CreditSystem.Domain.Abstractions.Projections;
 using CreditSystem.Domain.Abstractions;
 using CreditSystem.Domain.Abstractions.Repositories;
 using CreditSystem.Domain.Abstractions.Services;
-using CreditSystem.Domain.Models;
 using CreditSystem.Infrastructure.Documents;
 
 using CreditSystem.Infrastructure.EventStore;
@@ -74,6 +73,7 @@ public static class DependencyInjection
         services.AddScoped<IProjection, DelinquentLoansProjector>();
         services.AddScoped<IProjection, PaymentHistoryProjector>();
         services.AddScoped<IProjection, LoanPortfolioProjector>();
+        services.AddScoped<IProjection, PendingDisbursementsProjector>();
 
         services.AddScoped<IProjectionEngine,ProjectionEngine>();
         
@@ -120,20 +120,14 @@ public static class DependencyInjection
     {
         var connectionString = configuration.GetConnectionString("CreditDb")!;
 
+        services.AddScoped<IUnderwritingPolicyRepository>(_ =>
+            new UnderwritingPolicyRepository(connectionString));
+
         services.AddScoped<ILoanQueryService>(sp =>
             new LoanQueryService(
                 connectionString,
                 sp.GetRequiredService<IOptions<LateFeeConfiguration>>(),
-                sp.GetRequiredService<UnderwritingPolicy>()));
-
-        services.AddSingleton<IUnderwritingPolicyRepository>(_ =>
-            new UnderwritingPolicyRepository(connectionString));
-
-        services.AddSingleton<UnderwritingPolicy>(sp =>
-            sp.GetRequiredService<IUnderwritingPolicyRepository>()
-              .GetActiveAsync()
-              .GetAwaiter()
-              .GetResult());
+                sp.GetRequiredService<IUnderwritingPolicyRepository>()));
 
         services.AddScoped<ICreditProductRepository>(sp =>
             new CreditProductRepository(connectionString));
@@ -154,6 +148,11 @@ public static class DependencyInjection
 
         services.AddScoped<IReferenceRateRepository, ReferenceRateRepository>();
 
+        services.AddScoped<IProjectionCheckpointRepository>(_ =>
+            new ProjectionCheckpointRepository(connectionString));
+        services.AddScoped<IProjectionFailureRepository>(_ =>
+            new ProjectionFailureRepository(connectionString));
+
         services.AddScoped<IRateAdjustmentJob, RateAdjustmentJob>();
 
         services.AddScoped<ScribanTemplateEngine>();
@@ -168,6 +167,7 @@ public static class DependencyInjection
     {
         services.AddTransient<UnderwritingPolicyHealthCheck>();
         services.AddTransient<RabbitMqHealthCheck>();
+        services.AddTransient<ProjectionHealthCheck>();
         return services;
     }
 
@@ -189,6 +189,10 @@ public static class DependencyInjection
 
         // Rate adjustment worker
         services.AddHostedService<RateAdjustmentWorker>();
+
+        // Async projection dispatcher
+        services.Configure<ProjectionDispatcherOptions>(configuration.GetSection("ProjectionDispatcher"));
+        services.AddHostedService<ProjectionDispatcherWorker>();
 
         return services;
     }

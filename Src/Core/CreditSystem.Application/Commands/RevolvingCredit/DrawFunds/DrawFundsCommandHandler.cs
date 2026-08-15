@@ -1,4 +1,3 @@
-using CreditSystem.Domain.Abstractions.Projections;
 using CreditSystem.Domain.Abstractions.Repositories;
 using CreditSystem.Domain.Aggregates.RevolvingCredit.Events;
 using CreditSystem.Domain.Exceptions;
@@ -11,16 +10,13 @@ namespace CreditSystem.Application.Commands.RevolvingCredit.DrawFunds;
 public class DrawFundsCommandHandler : IRequestHandler<DrawFundsCommand, DrawFundsResponse>
 {
     private readonly IRevolvingCreditRepository _repository;
-    private readonly IProjectionEngine _projectionEngine;
     private readonly ILogger<DrawFundsCommandHandler> _logger;
 
     public DrawFundsCommandHandler(
         IRevolvingCreditRepository repository,
-        IProjectionEngine projectionEngine,
         ILogger<DrawFundsCommandHandler> logger)
     {
         _repository = repository;
-        _projectionEngine = projectionEngine;
         _logger = logger;
     }
 
@@ -53,20 +49,7 @@ public class DrawFundsCommandHandler : IRequestHandler<DrawFundsCommand, DrawFun
             .OfType<FundsDrawn>()
             .First();
 
-        var events = aggregate.UncommittedEvents.ToList();
         await _repository.SaveAsync(aggregate, cancellationToken);
-
-        // Proyectar a Read Models
-        try
-        {
-            await _projectionEngine.ProjectEventsAsync(events, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex,
-                "Failed to project events for credit line {CreditLineId}. Read models can be rebuilt.",
-                aggregate.Id);
-        }
 
         _logger.LogInformation(
             "Drew {Amount} from credit line {CreditLineId}. New balance: {Balance}, Available: {Available}",

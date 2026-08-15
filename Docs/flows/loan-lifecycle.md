@@ -70,7 +70,7 @@ Content-Type: application/json
 
 ## PASO 1 — Verificar que el socio existe
 
-El socio debe existir en el sistema (llegó vía CRM). Se consulta por su `externalId` (el ID del CRM).
+El socio debe existir en el sistema (enrolado vía `POST /members/enroll`). Se consulta por su `externalId` (el ID del CRM).
 
 ```http
 GET /api/v1/members/{externalId}
@@ -90,13 +90,25 @@ GET /api/v1/members/{externalId}
 }
 ```
 
-> Si devuelve `404`, el socio aún no ha sido sincronizado desde el CRM. Verificar la cola RabbitMQ.
+> Si devuelve `404`, el cliente aún no ha sido enrolado como socio. Ver flujo en `Docs/flows/customer-and-member-flow.md`.
 
 ---
 
 ## PASO 2 — Crear el contrato (evaluación y aprobación)
 
-El sistema evalúa automáticamente el perfil del socio contra las reglas del motor (`CreditScoreRule`, `DebtToIncomeRule`, `CollateralRule`, `MaxLoanAmountRule`, `ActiveLoansRule`).
+El sistema evalúa automáticamente el perfil del socio contra las reglas del motor en orden de prioridad:
+
+| Prioridad | Regla | Tipo | Criterio |
+|---|---|---|---|
+| 0 | `MemberSharesEvaluation` | HardStop si `enforce=true` | Aportaciones × multiplier |
+| 1 | `ProductEligibility` | HardStop | Monto y plazo dentro del rango del producto |
+| 1 | `CreditScoreEvaluation` | HardStop | Score ≥ mínimo |
+| 2 | `DebtToIncomeRatio` | **HardStop** | DTI ≤ `max_dti_ratio` (default 50%) |
+| 2 | `PaymentCapacityEvaluation` | **HardStop** | Monto ≤ PV(cuota_max, tasa_producto, plazo) |
+| 3 | `CollateralEvaluation` | Informativa | Ajuste de tasa según cobertura |
+| 4 | `ActiveLoansCheck` | Informativa | Ajuste de tasa +1% si tiene préstamos activos |
+
+> No existe cap absoluto de monto en el código. El techo de monto lo define `maxAmount` del producto. El techo financiero real lo calcula `PaymentCapacityEvaluation` desde el ingreso del solicitante.
 
 ```http
 POST /api/v1/loans
@@ -110,12 +122,13 @@ X-User-Id: usr-oficina-001
   "currency": "CRC",
   "termMonths": 24,
   "amortizationMethod": "French",
+  "rateType": "Fixed",
   "guarantees": [
     {
-      "type": "PersonalGuarantee",
+      "type": "FianzaSolidaria",
       "description": "Fiador solidario Juan Pérez",
       "appraisalValue": 2000000,
-      "coverageRate": 100
+      "coverageRate": 0.80
     }
   ]
 }
@@ -129,11 +142,12 @@ X-User-Id: usr-oficina-001
   "message": "Contract created successfully",
   "approvedRate": 15.25,
   "evaluationResults": [
-    { "ruleName": "CreditScoreRule",    "passed": true,  "message": "Credit score 720 meets minimum 600" },
-    { "ruleName": "DebtToIncomeRule",   "passed": true,  "message": "DTI 32% is within limit 45%" },
-    { "ruleName": "CollateralRule",     "passed": true,  "message": "Collateral coverage adequate" },
-    { "ruleName": "MaxLoanAmountRule",  "passed": true,  "message": "Amount within product limits" },
-    { "ruleName": "ActiveLoansRule",    "passed": true,  "message": "No blocking active loans" }
+    { "ruleName": "ProductEligibility",        "passed": true, "message": "Contract meets eligibility requirements" },
+    { "ruleName": "CreditScoreEvaluation",     "passed": true, "message": "Credit score 720 approved with rate adjustment of 0%" },
+    { "ruleName": "DebtToIncomeRatio",         "passed": true, "message": "DTI ratio 32.50% is within acceptable limits" },
+    { "ruleName": "PaymentCapacityEvaluation", "passed": true, "message": "Requested amount within payment capacity (max financiable: ₡2,340,000)" },
+    { "ruleName": "CollateralEvaluation",      "passed": true, "message": "Collateral ratio 66.67% provides security for the loan" },
+    { "ruleName": "ActiveLoansCheck",          "passed": true, "message": "Customer has no active loans" }
   ]
 }
 ```
@@ -474,19 +488,58 @@ POST /loans/{id}/payoff  ──►  status: PaidOff
 
 ---
 
+## Configuración de UnderwritingPolicy
+
+La política de suscripción se configura directamente en la base de datos (`underwriting_policies WHERE id = 'default'`):
+
+| Columna | Tipo | Default | Descripción |
+|---|---|---|---|
+| `base_interest_rate` | DECIMAL | — | Tasa base referencial |
+| `auto_default_threshold_days` | INT | 90 | Días de mora para pasar a Default automáticamente |
+| `no_score_behavior` | VARCHAR | `approve_with_penalty` | `approve_with_penalty` o `reject` cuando no hay score |
+| `shares_multiplier_limit` | INT | 5 | Múltiplo de aportaciones para calcular límite de crédito |
+| `require_active_membership` | BOOLEAN | false | Si `true`, exige membresía cooperativa activa |
+| `grace_period_days` | INT | 5 | Días de gracia antes de registrar mora |
+| `penalty_rate` | NUMERIC | 0 | Tasa de mora (ej. `0.025` = 2.5%) |
+| `origination_fee_rate` | NUMERIC | 0 | Comisión de apertura (ej. `0.01` = 1%) |
+| `enforce_shares_capacity_limit` | BOOLEAN | **false** | Ver abajo |
+| `max_dti_ratio` | NUMERIC | **0.50** | Ratio máximo deuda/ingreso (50%). Usado por `DebtToIncomeRule` y `PaymentCapacityRule` |
+
+### `enforce_shares_capacity_limit`
+
+Controla el comportamiento de la regla de aportaciones (`MemberSharesEvaluation`):
+
+- **`false` (default)**: la regla evalúa y reporta si el monto supera `aportaciones × shares_multiplier_limit`, pero **no bloquea** el préstamo. El resultado aparece en `evaluationResults` con `passed: true` y mensaje `"Shares limit exceeded (informative only): ..."`. Los ingresos y garantías siguen siendo el factor determinante.
+- **`true`**: la regla actúa como **hard stop** — si el monto supera el límite de aportaciones, el préstamo se rechaza independientemente de ingresos o garantías.
+
+```sql
+-- Activar hard stop por aportaciones
+UPDATE underwriting_policies SET enforce_shares_capacity_limit = true WHERE id = 'default';
+
+-- Volver a modo informativo (default)
+UPDATE underwriting_policies SET enforce_shares_capacity_limit = false WHERE id = 'default';
+```
+
+---
+
 ## Tablas de referencia
 
 ### PaymentMethod
-`ACH` | `WIRE` | `CHECK` | `CARD` | `CASH`
+`ACH` | `Wire` | `Check` | `Card` | `Cash`
 
 ### AmortizationMethod
-`French` (cuota fija) | `German` (capital fijo) | `Flat` | `American` | `InterestOnly`
+`French` (cuota fija) | `German` (capital fijo) | `American` (bullet) | `Flat` | `InterestOnly`
+
+### RateType
+`Fixed` | `Variable` (requiere `spread` y `referenceRateId`)
 
 ### GuaranteeType
-`PersonalGuarantee` | `RealEstate` | `Vehicle` | `FinancialInstrument` | `Other`
+`Hipoteca` | `Prenda` | `FianzaSolidaria` | `DepositoAPlazo` | `CesionDeDerecho`
+
+> **`coverageRate`**: factor decimal entre 0 y 1 que indica qué porción del valor del bien se reconoce como respaldo. Ej: `0.80` = 80% del avalúo. Cobertura efectiva = `appraisalValue × coverageRate`.
 
 ### PaymentComponent (prelación)
-`Insurance` | `Fees` | `PenaltyInterest` | `SocialCapital` | `RegularInterest` | `Principal`
+`Insurance` | `Fees` | `PenaltyInterest` | `RegularInterest` | `SocialCapital` | `Principal`
 
 ### SocialCapitalCalculationType
 `FixedAmount` | `PercentageOfPayment` | `PercentageOfPrincipalPaid` | `PercentageOfOriginalAmount`

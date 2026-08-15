@@ -1,4 +1,5 @@
 using CreditSystem.Domain.Entities;
+using CreditSystem.Domain.Models;
 using CreditSystem.Domain.ValueObjects;
 
 namespace CreditSystem.Domain.Rules;
@@ -16,4 +17,5 @@ public record ContractEvaluationContext
     public Money? MemberSharesAmount { get; init; }
     public bool? IsActiveMember { get; init; }
     public CreditProduct? Product { get; init; }
+    public UnderwritingPolicy Policy { get; init; } = null!;
 }

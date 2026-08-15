@@ -1,5 +1,3 @@
-using CreditSystem.Domain.Models;
-
 namespace CreditSystem.Domain.Rules.Implementations;
 
 public class MemberSharesRule : IContractRule, IHardStopRule
@@ -7,19 +5,14 @@ public class MemberSharesRule : IContractRule, IHardStopRule
     public string RuleName => "MemberSharesEvaluation";
     public int Priority => 0;
 
-    private readonly UnderwritingPolicy _policy;
-
-    public MemberSharesRule(UnderwritingPolicy policy)
-    {
-        _policy = policy;
-    }
-
     public Task<RuleEvaluationResult> EvaluateAsync(
         ContractEvaluationContext context,
         CancellationToken ct = default)
     {
+        var policy = context.Policy;
+
         // Validar membresía activa si la política lo requiere
-        if (_policy.RequireActiveMembership && context.IsActiveMember != true)
+        if (policy.RequireActiveMembership && context.IsActiveMember != true)
         {
             return Task.FromResult(RuleEvaluationResult.Fail(
                 RuleName,
@@ -35,15 +28,31 @@ public class MemberSharesRule : IContractRule, IHardStopRule
                 new Dictionary<string, object> { ["Skipped"] = true }));
         }
 
-        var maxAllowed = context.MemberSharesAmount.Amount * _policy.SharesMultiplierLimit;
+        var maxAllowed = context.MemberSharesAmount.Amount * policy.SharesMultiplierLimit;
         var requested = context.RequestedAmount.Amount;
 
         if (requested > maxAllowed)
         {
-            return Task.FromResult(RuleEvaluationResult.Fail(
+            if (policy.EnforceSharesCapacityLimit)
+            {
+                return Task.FromResult(RuleEvaluationResult.Fail(
+                    RuleName,
+                    $"Requested amount {requested:N2} exceeds maximum allowed {maxAllowed:N2} " +
+                    $"({policy.SharesMultiplierLimit}x member shares of {context.MemberSharesAmount.Amount:N2})"));
+            }
+
+            return Task.FromResult(RuleEvaluationResult.Pass(
                 RuleName,
-                $"Requested amount {requested:N2} exceeds maximum allowed {maxAllowed:N2} " +
-                $"({_policy.SharesMultiplierLimit}x member shares of {context.MemberSharesAmount.Amount:N2})"));
+                $"Shares limit exceeded (informative only): {requested:N2} > {maxAllowed:N2} " +
+                $"({policy.SharesMultiplierLimit}x member shares of {context.MemberSharesAmount.Amount:N2})",
+                new Dictionary<string, object>
+                {
+                    ["SharesAmount"] = context.MemberSharesAmount.Amount,
+                    ["MultiplierLimit"] = policy.SharesMultiplierLimit,
+                    ["MaxAllowedAmount"] = maxAllowed,
+                    ["LimitExceeded"] = true,
+                    ["Enforced"] = false
+                }));
         }
 
         return Task.FromResult(RuleEvaluationResult.Pass(
@@ -52,7 +61,7 @@ public class MemberSharesRule : IContractRule, IHardStopRule
             new Dictionary<string, object>
             {
                 ["SharesAmount"] = context.MemberSharesAmount.Amount,
-                ["MultiplierLimit"] = _policy.SharesMultiplierLimit,
+                ["MultiplierLimit"] = policy.SharesMultiplierLimit,
                 ["MaxAllowedAmount"] = maxAllowed
             }));
     }

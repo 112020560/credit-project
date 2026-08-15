@@ -1,11 +1,9 @@
 using CreditSystem.Domain.Abstractions;
-using CreditSystem.Domain.Abstractions.Projections;
 using CreditSystem.Domain.Abstractions.Repositories;
 using CreditSystem.Domain.Abstractions.Services;
 using CreditSystem.Domain.Aggregates.LoanContract;
 using CreditSystem.Domain.Entities;
 using CreditSystem.Domain.Enums;
-using CreditSystem.Domain.Models;
 using CreditSystem.Domain.Rules;
 using CreditSystem.Domain.Services.Amortization;
 using CreditSystem.Domain.ValueObjects;
@@ -24,9 +22,8 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
     private readonly ILoanGuaranteeRepository _guaranteeRepository;
     private readonly ILoanQueryService _queryService;
     private readonly ContractEngine _contractEngine;
-    private readonly UnderwritingPolicy _policy;
+    private readonly IUnderwritingPolicyRepository _policyRepository;
     private readonly IAmortizationCalculatorFactory _calculatorFactory;
-    private readonly IProjectionEngine _projectionEngine;
     private readonly IReferenceRateRepository _referenceRateRepository;
     private readonly ILogger<CreateContractCommandHandler> _logger;
 
@@ -38,9 +35,8 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
         ILoanGuaranteeRepository guaranteeRepository,
         ILoanQueryService queryService,
         ContractEngine contractEngine,
-        UnderwritingPolicy policy,
+        IUnderwritingPolicyRepository policyRepository,
         IAmortizationCalculatorFactory calculatorFactory,
-        IProjectionEngine projectionEngine,
         IReferenceRateRepository referenceRateRepository,
         ILogger<CreateContractCommandHandler> logger)
     {
@@ -51,9 +47,8 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
         _guaranteeRepository = guaranteeRepository;
         _queryService = queryService;
         _contractEngine = contractEngine;
-        _policy = policy;
+        _policyRepository = policyRepository;
         _calculatorFactory = calculatorFactory;
-        _projectionEngine = projectionEngine;
         _referenceRateRepository = referenceRateRepository;
         _logger = logger;
     }
@@ -87,10 +82,20 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
             return CreateContractResponse.Failed("Credit product is not active");
         }
 
+        // Cargar la política de underwriting del producto
+        var policy = await _policyRepository.GetByIdAsync(product.UnderwritingPolicyId, cancellationToken);
+        if (policy == null)
+        {
+            _logger.LogWarning("Underwriting policy '{PolicyId}' referenced by product {ProductId} not found",
+                product.UnderwritingPolicyId, product.Id);
+            return CreateContractResponse.Failed(
+                $"Underwriting policy '{product.UnderwritingPolicyId}' not found. Contact an administrator.");
+        }
+
         // Resolver membresía cooperativa
         var member = await _memberRepository.GetByExternalIdAsync(request.ExternalCustomerId, cancellationToken);
 
-        if (member == null && _policy.RequireActiveMembership)
+        if (member == null && policy.RequireActiveMembership)
         {
             _logger.LogWarning("Applicant {ExternalId} is not a registered cooperative member", request.ExternalCustomerId);
             return CreateContractResponse.Failed("Applicant is not a registered cooperative member");
@@ -119,10 +124,11 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
             HasActiveLoans = hasActiveLoans,
             MemberSharesAmount = member?.State.Shares.TotalAmount,
             IsActiveMember = member != null ? member.State.Status == MemberStatus.Active : null,
-            Product = product
+            Product = product,
+            Policy = policy
         };
 
-        var effectiveBaseRate = product.Rates.BaseInterestRate ?? _policy.BaseInterestRate;
+        var effectiveBaseRate = product.Rates.BaseInterestRate ?? policy.BaseInterestRate;
         var evaluation = await _contractEngine.EvaluateAsync(evaluationContext, effectiveBaseRate, cancellationToken);
 
         foreach (var result in evaluation.Results)
@@ -168,7 +174,7 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
             interestRate = new InterestRate(evaluation.InterestRate);
         }
 
-        var effectiveOriginationFeeRate = product.OriginationFeeRate ?? _policy.OriginationFeeRate;
+        var effectiveOriginationFeeRate = product.OriginationFeeRate ?? policy.OriginationFeeRate;
         var originationFee = new Money(request.Amount * effectiveOriginationFeeRate / 100m, request.Currency);
 
         var aggregate = LoanContractAggregate.Create(
@@ -187,8 +193,6 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
             originationFee: originationFee,
             productId: request.ProductId
         );
-
-        var events = aggregate.UncommittedEvents.ToList();
 
         await _repository.SaveAsync(aggregate, cancellationToken);
 
@@ -215,18 +219,6 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
                         aggregate.Id, input.Type);
                 }
             }
-        }
-
-        // 5. Proyectar eventos a Read Models
-        try
-        {
-            await _projectionEngine.ProjectEventsAsync(events, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex,
-                "Failed to project events for contract {ContractId}. Read models can be rebuilt.",
-                aggregate.Id);
         }
 
         _logger.LogInformation(

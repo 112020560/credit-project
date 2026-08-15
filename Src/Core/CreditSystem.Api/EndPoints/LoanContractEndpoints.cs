@@ -1,8 +1,10 @@
 using CreditSystem.Api.EndPoints.Dtos;
 using CreditSystem.Application.Commands.ApplyPayment;
+using CreditSystem.Application.Commands.ConfirmDisbursement;
 using CreditSystem.Application.Commands.CreateContract;
 using CreditSystem.Application.Commands.DefaultContract;
 using CreditSystem.Application.Commands.DisburseLoan;
+using CreditSystem.Application.Commands.FailDisbursement;
 using CreditSystem.Application.Commands.PayoffContract;
 using CreditSystem.Application.Commands.RestructureContract;
 using CreditSystem.Application.Queries;
@@ -128,6 +130,28 @@ public static class LoanContractEndpoints
             .WithName("GetPaidOffLoans")
             .WithSummary("Get all paid off loans")
             .Produces<IReadOnlyList<PaidOffLoanResponse>>(StatusCodes.Status200OK);
+
+        // GET /api/loans/pending-disbursement - Listar desembolsos pendientes
+        group.MapGet("/pending-disbursement", GetPendingDisbursements)
+            .WithName("GetPendingDisbursements")
+            .WithSummary("Get all loans pending disbursement")
+            .Produces<IReadOnlyList<PendingDisbursementResponse>>(StatusCodes.Status200OK);
+
+        // POST /api/loans/{id}/confirm-disbursement - Confirmar desembolso
+        group.MapPost("/{id:guid}/confirm-disbursement", ConfirmDisbursement)
+            .WithName("ConfirmDisbursement")
+            .WithSummary("Confirm that a loan disbursement was completed")
+            .Produces<ConfirmDisbursementResponse>(StatusCodes.Status200OK)
+            .Produces<ProblemDetails>(StatusCodes.Status400BadRequest)
+            .Produces<ProblemDetails>(StatusCodes.Status404NotFound);
+
+        // POST /api/loans/{id}/fail-disbursement - Registrar fallo de desembolso
+        group.MapPost("/{id:guid}/fail-disbursement", FailDisbursement)
+            .WithName("FailDisbursement")
+            .WithSummary("Record a failed disbursement attempt")
+            .Produces<FailDisbursementResponse>(StatusCodes.Status200OK)
+            .Produces<ProblemDetails>(StatusCodes.Status400BadRequest)
+            .Produces<ProblemDetails>(StatusCodes.Status404NotFound);
     }
 
     public static void MapDelinquentLoansEndpoints(this IEndpointRouteBuilder app)
@@ -610,5 +634,95 @@ public static class LoanContractEndpoints
 
         var response = await mediator.Send(query, cancellationToken);
         return Results.Ok(response);
+    }
+
+    private static async Task<IResult> GetPendingDisbursements(
+        [FromServices] ILoanQueryService queryService,
+        CancellationToken cancellationToken)
+    {
+        var items = await queryService.GetPendingDisbursementsAsync(cancellationToken);
+        return Results.Ok(items.Select(PendingDisbursementResponse.FromReadModel).ToList());
+    }
+
+    private static async Task<IResult> ConfirmDisbursement(
+        Guid id,
+        [FromBody] ConfirmDisbursementRequest request,
+        [FromServices] IMediator mediator,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var command = new ConfirmDisbursementCommand
+            {
+                LoanId = id,
+                ConfirmedBy = request.ConfirmedBy
+            };
+
+            var response = await mediator.Send(command, cancellationToken);
+
+            if (!response.Success)
+            {
+                return Results.BadRequest(new ProblemDetails
+                {
+                    Title = "Confirm Disbursement Failed",
+                    Detail = response.Message,
+                    Status = StatusCodes.Status400BadRequest,
+                    Extensions = { ["errors"] = response.Errors }
+                });
+            }
+
+            return Results.Ok(response);
+        }
+        catch (ValidationException ex)
+        {
+            return Results.BadRequest(new ProblemDetails
+            {
+                Title = "Validation Failed",
+                Detail = "One or more validation errors occurred",
+                Status = StatusCodes.Status400BadRequest,
+                Extensions = { ["errors"] = ex.Errors.Select(e => e.ErrorMessage).ToList() }
+            });
+        }
+    }
+
+    private static async Task<IResult> FailDisbursement(
+        Guid id,
+        [FromBody] FailDisbursementRequest request,
+        [FromServices] IMediator mediator,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var command = new FailDisbursementCommand
+            {
+                LoanId = id,
+                Reason = request.Reason
+            };
+
+            var response = await mediator.Send(command, cancellationToken);
+
+            if (!response.Success)
+            {
+                return Results.BadRequest(new ProblemDetails
+                {
+                    Title = "Fail Disbursement Failed",
+                    Detail = response.Message,
+                    Status = StatusCodes.Status400BadRequest,
+                    Extensions = { ["errors"] = response.Errors }
+                });
+            }
+
+            return Results.Ok(response);
+        }
+        catch (ValidationException ex)
+        {
+            return Results.BadRequest(new ProblemDetails
+            {
+                Title = "Validation Failed",
+                Detail = "One or more validation errors occurred",
+                Status = StatusCodes.Status400BadRequest,
+                Extensions = { ["errors"] = ex.Errors.Select(e => e.ErrorMessage).ToList() }
+            });
+        }
     }
 }

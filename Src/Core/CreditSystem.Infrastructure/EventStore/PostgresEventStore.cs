@@ -284,6 +284,25 @@ public class PostgresEventStore : IEventStore
             .AsReadOnly();
     }
 
+    public async Task<IEnumerable<StoredEventRecord>> GetEventsSinceSequenceAsync(
+        long fromSequence,
+        int batchSize,
+        CancellationToken ct = default)
+    {
+        const string sql = @"
+            SELECT id as Id, stream_id as StreamId, event_type as EventType,
+                   event_data as EventData, sequence as Sequence, stored_at as StoredAt
+            FROM stored_events
+            WHERE sequence > @FromSequence
+            ORDER BY sequence ASC
+            LIMIT @BatchSize";
+
+        await using var connection = new NpgsqlConnection(_connectionString);
+        var rows = await connection.QueryAsync<StoredEventRow>(sql, new { FromSequence = fromSequence, BatchSize = batchSize });
+
+        return rows.Select(r => new StoredEventRecord(r.Id, r.StreamId, r.EventType, r.EventData, r.Sequence, r.StoredAt));
+    }
+
     #endregion
 
     #region Verification

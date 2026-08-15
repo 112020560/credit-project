@@ -97,11 +97,12 @@ public static class ProductEndpoints
             request.DefaultAmortizationMethod,
             request.RequiresCollateral,
             waterfall: waterfall,
-            socialCapitalConfig: socialCapitalConfig);
+            socialCapitalConfig: socialCapitalConfig,
+            underwritingPolicyId: request.UnderwritingPolicyId ?? "default");
 
         await repository.InsertAsync(product, cancellationToken);
 
-        return Results.Created($"/api/products/{product.Id}", product.Id);
+        return Results.Created($"/api/products/{product.Id}", new { ProductId=product.Id });
     }
 
     private static async Task<IResult> UpdateProductStatus(
@@ -129,6 +130,7 @@ public static class ProductEndpoints
         p.DefaultAmortizationMethod.ToString(),
         p.RequiresCollateral,
         p.Status.ToString(),
+        p.UnderwritingPolicyId,
         p.Waterfall.Steps.Select(s => new WaterfallStepRequest(s.Priority, s.Component)).ToList(),
         p.SocialCapitalConfig != null
             ? new SocialCapitalConfigRequest(
@@ -156,7 +158,8 @@ public record CreateProductRequest(
     AmortizationMethod DefaultAmortizationMethod,
     bool RequiresCollateral,
     List<WaterfallStepRequest>? Waterfall = null,
-    SocialCapitalConfigRequest? SocialCapitalConfig = null);
+    SocialCapitalConfigRequest? SocialCapitalConfig = null,
+    string? UnderwritingPolicyId = null);
 
 public record UpdateProductStatusRequest(ProductStatus Status);
 
@@ -172,5 +175,6 @@ public record ProductResponse(
     string DefaultAmortizationMethod,
     bool RequiresCollateral,
     string Status,
+    string UnderwritingPolicyId,
     IReadOnlyList<WaterfallStepRequest> Waterfall,
     SocialCapitalConfigRequest? SocialCapitalConfig);

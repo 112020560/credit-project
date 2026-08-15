@@ -1,5 +1,4 @@
 using CreditSystem.Domain.Enums;
-using CreditSystem.Domain.Models;
 
 namespace CreditSystem.Domain.Rules.Implementations;
 
@@ -9,12 +8,6 @@ public class CreditScoreRule : IContractRule, IHardStopRule
     public int Priority => 1;
 
     private const int MinimumScore = 500;
-    private readonly UnderwritingPolicy _policy;
-
-    public CreditScoreRule(UnderwritingPolicy policy)
-    {
-        _policy = policy;
-    }
 
     public Task<RuleEvaluationResult> EvaluateAsync(
         ContractEvaluationContext context,
@@ -24,7 +17,7 @@ public class CreditScoreRule : IContractRule, IHardStopRule
 
         if (!score.HasValue)
         {
-            return _policy.NoScoreBehavior == NoScoreBehavior.Reject
+            return context.Policy.NoScoreBehavior == NoScoreBehavior.Reject
                 ? Task.FromResult(RuleEvaluationResult.Fail(
                     RuleName,
                     "Credit score required — policy rejects applications without score"))

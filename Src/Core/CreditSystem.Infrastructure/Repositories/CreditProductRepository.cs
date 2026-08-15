@@ -22,7 +22,7 @@ public class CreditProductRepository : ICreditProductRepository
         const string sql = """
             SELECT id, name, min_amount, max_amount, min_term_months, max_term_months,
                    base_interest_rate, max_ltv, default_amortization_method, requires_collateral, status,
-                   penalty_rate, origination_fee_rate,
+                   penalty_rate, origination_fee_rate, underwriting_policy_id,
                    waterfall_config::text AS waterfall_config, social_capital_config::text AS social_capital_config
             FROM credit_products
             WHERE id = @Id
@@ -39,7 +39,7 @@ public class CreditProductRepository : ICreditProductRepository
         const string sql = """
             SELECT id, name, min_amount, max_amount, min_term_months, max_term_months,
                    base_interest_rate, max_ltv, default_amortization_method, requires_collateral, status,
-                   penalty_rate, origination_fee_rate,
+                   penalty_rate, origination_fee_rate, underwriting_policy_id,
                    waterfall_config::text AS waterfall_config, social_capital_config::text AS social_capital_config
             FROM credit_products
             WHERE status = 'Active'
@@ -56,7 +56,7 @@ public class CreditProductRepository : ICreditProductRepository
         const string sql = """
             SELECT id, name, min_amount, max_amount, min_term_months, max_term_months,
                    base_interest_rate, max_ltv, default_amortization_method, requires_collateral, status,
-                   penalty_rate, origination_fee_rate,
+                   penalty_rate, origination_fee_rate, underwriting_policy_id,
                    waterfall_config::text AS waterfall_config, social_capital_config::text AS social_capital_config
             FROM credit_products
             ORDER BY name
@@ -73,11 +73,13 @@ public class CreditProductRepository : ICreditProductRepository
             INSERT INTO credit_products
                 (id, name, min_amount, max_amount, min_term_months, max_term_months,
                  base_interest_rate, max_ltv, default_amortization_method, requires_collateral, status,
-                 penalty_rate, origination_fee_rate, waterfall_config, social_capital_config, created_at)
+                 penalty_rate, origination_fee_rate, underwriting_policy_id,
+                 waterfall_config, social_capital_config, created_at)
             VALUES
                 (@Id, @Name, @MinAmount, @MaxAmount, @MinTermMonths, @MaxTermMonths,
                  @BaseInterestRate, @MaxLtv, @DefaultAmortizationMethod, @RequiresCollateral, @Status,
-                 @PenaltyRate, @OriginationFeeRate, @WaterfallConfig::jsonb, @SocialCapitalConfig::jsonb, NOW())
+                 @PenaltyRate, @OriginationFeeRate, @UnderwritingPolicyId,
+                 @WaterfallConfig::jsonb, @SocialCapitalConfig::jsonb, NOW())
             """;
 
         await using var conn = new NpgsqlConnection(_connectionString);
@@ -96,6 +98,7 @@ public class CreditProductRepository : ICreditProductRepository
             Status = product.Status.ToString(),
             product.PenaltyRate,
             product.OriginationFeeRate,
+            product.UnderwritingPolicyId,
             WaterfallConfig = SerializeWaterfall(product.Waterfall),
             SocialCapitalConfig = product.SocialCapitalConfig != null
                 ? JsonSerializer.Serialize(product.SocialCapitalConfig)
@@ -155,7 +158,8 @@ public class CreditProductRepository : ICreditProductRepository
             (decimal?)row.penalty_rate,
             (decimal?)row.origination_fee_rate,
             waterfall,
-            socialCapitalConfig);
+            socialCapitalConfig,
+            (string?)row.underwriting_policy_id ?? "default");
     }
 
     private static string SerializeWaterfall(PaymentWaterfall waterfall)
@@ -169,7 +173,8 @@ public class CreditProductRepository : ICreditProductRepository
         if (string.IsNullOrEmpty(json))
             return null;
 
-        var steps = JsonSerializer.Deserialize<List<WaterfallStepDto>>(json);
+        var steps = JsonSerializer.Deserialize<List<WaterfallStepDto>>(json,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
         if (steps == null || steps.Count == 0)
             return null;
 

@@ -1,6 +1,5 @@
 using CreditSystem.Application.Queries.GetPayoffAmount;
 using CreditSystem.Domain.Abstractions;
-using CreditSystem.Domain.Abstractions.Projections;
 using CreditSystem.Domain.Aggregates.LoanContract.Events;
 using CreditSystem.Domain.Enums;
 using CreditSystem.Domain.Exceptions;
@@ -13,18 +12,15 @@ namespace CreditSystem.Application.Commands.PayoffContract;
 public class PayoffContractCommandHandler : IRequestHandler<PayoffContractCommand, PayoffContractResponse>
 {
     private readonly ILoanContractRepository _repository;
-    private readonly IProjectionEngine _projectionEngine;
     private readonly IMediator _mediator;
     private readonly ILogger<PayoffContractCommandHandler> _logger;
 
     public PayoffContractCommandHandler(
         ILoanContractRepository repository,
-        IProjectionEngine projectionEngine,
         IMediator mediator,
         ILogger<PayoffContractCommandHandler> logger)
     {
         _repository = repository;
-        _projectionEngine = projectionEngine;
         _mediator = mediator;
         _logger = logger;
     }
@@ -95,21 +91,7 @@ public class PayoffContractCommandHandler : IRequestHandler<PayoffContractComman
             return PayoffContractResponse.Failed("Payoff did not complete - balance may not be zero");
         }
 
-        var events = aggregate.UncommittedEvents.ToList();
-
         await _repository.SaveAsync(aggregate, cancellationToken);
-
-        // 8. Proyectar a Read Models
-        try
-        {
-            await _projectionEngine.ProjectEventsAsync(events, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex,
-                "Failed to project events for loan {LoanId}. Read models can be rebuilt.",
-                aggregate.Id);
-        }
 
         _logger.LogInformation(
             "Loan {LoanId} paid off. Amount: {Amount}, Early: {Early}",

@@ -1,4 +1,3 @@
-using CreditSystem.Domain.Abstractions.Projections;
 using CreditSystem.Domain.Abstractions.Repositories;
 
 using CreditSystem.Domain.Aggregates.RevolvingCredit;
@@ -14,20 +13,17 @@ public class CreateCreditLineCommandHandler : IRequestHandler<CreateCreditLineCo
     private readonly IRevolvingCreditRepository _repository;
     private readonly ICustomerReadRepository _customerService;
     private readonly ContractEngine _contractEngine;
-    private readonly IProjectionEngine _projectionEngine;
     private readonly ILogger<CreateCreditLineCommandHandler> _logger;
 
     public CreateCreditLineCommandHandler(
         IRevolvingCreditRepository repository,
         ICustomerReadRepository customerService,
         ContractEngine contractEngine,
-        IProjectionEngine projectionEngine,
         ILogger<CreateCreditLineCommandHandler> logger)
     {
         _repository = repository;
         _customerService = customerService;
         _contractEngine = contractEngine;
-        _projectionEngine = projectionEngine;
         _logger = logger;
     }
 
@@ -84,18 +80,7 @@ public class CreateCreditLineCommandHandler : IRequestHandler<CreateCreditLineCo
             billingCycleDay: request.BillingCycleDay,
             gracePeriodDays: request.GracePeriodDays);
 
-        var events = aggregate.UncommittedEvents.ToList();
         await _repository.SaveAsync(aggregate, cancellationToken);
-        try
-        {
-            await _projectionEngine.ProjectEventsAsync(events, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex,
-                "Failed to project events for credit line {CreditLineId}. Read models can be rebuilt.",
-                aggregate.Id);
-        }
 
         _logger.LogInformation(
             "Credit line {CreditLineId} created for customer {CustomerId} with limit {Limit}",

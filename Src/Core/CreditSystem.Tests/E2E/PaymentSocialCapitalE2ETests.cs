@@ -44,7 +44,6 @@ public class PaymentSocialCapitalE2ETests : IAsyncLifetime
             calculator: calculator,
             evaluationMetadata: new Dictionary<string, object>());
 
-        aggregate.ClearUncommittedEvents();
         aggregate.Disburse("WIRE", "CR21015201001026284066");
         return aggregate;
     }

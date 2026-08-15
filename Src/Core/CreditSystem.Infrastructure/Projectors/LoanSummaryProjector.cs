@@ -59,26 +59,32 @@ public class LoanSummaryProjector : IProjection
             case RateAdjusted e:
                 await HandleRateAdjusted(e, ct);
                 break;
+            case DisbursementConfirmed e:
+                await HandleDisbursementConfirmed(e, ct);
+                break;
+            case DisbursementFailed e:
+                await HandleDisbursementFailed(e, ct);
+                break;
         }
     }
 
     private async Task HandleContractCreated(ContractCreated e, CancellationToken ct)
     {
         var customer = await _customerService.GetByIdAsync(e.CustomerId, ct);
-        var firstPayment = e.Schedule.Entries.FirstOrDefault();
+        var firstPayment = e.Schedule?.Entries.FirstOrDefault();
 
         var model = new LoanSummaryReadModel
         {
             LoanId = e.AggregateId,
             CustomerId = e.CustomerId,
             CustomerName = customer?.FullName,
-            Principal = e.Principal.Amount,
-            CurrentBalance = e.Principal.Amount,
+            Principal = e.Principal?.Amount ?? 0,
+            CurrentBalance = e.Principal?.Amount ?? 0,
             AccruedInterest = 0,
-            TotalFees = e.OriginationFee.Amount,
-            OriginationFee = e.OriginationFee.Amount,
+            TotalFees = e.OriginationFee?.Amount ?? 0,
+            OriginationFee = e.OriginationFee?.Amount ?? 0,
             AccruedPenaltyInterest = 0,
-            InterestRate = e.InterestRate.AnnualRate,
+            InterestRate = e.InterestRate?.AnnualRate ?? 0,
             TermMonths = e.TermMonths,
             Status = "Approved",
             PaymentsMade = 0,
@@ -101,9 +107,9 @@ public class LoanSummaryProjector : IProjection
     private async Task HandleLoanDisbursed(LoanDisbursed e, CancellationToken ct)
     {
         const string sql = @"
-            UPDATE rm_loan_summaries 
-            SET status = 'Active', 
-                disbursed_at = @DisbursedAt, 
+            UPDATE rm_loan_summaries
+            SET status = 'Disbursing',
+                disbursed_at = @DisbursedAt,
                 version = @Version,
                 updated_at = @Now
             WHERE loan_id = @LoanId";
@@ -293,6 +299,41 @@ public class LoanSummaryProjector : IProjection
 
         _logger.LogDebug("Projected RateAdjusted for loan {LoanId}: {OldRate}% → {NewRate}%",
             e.AggregateId, e.OldRate, e.NewRate);
+    }
+
+    private async Task HandleDisbursementConfirmed(DisbursementConfirmed e, CancellationToken ct)
+    {
+        const string sql = @"
+            UPDATE rm_loan_summaries
+            SET status = 'Active',
+                version = @Version,
+                updated_at = @Now
+            WHERE loan_id = @LoanId";
+
+        await _store.ExecuteAsync(sql, new
+        {
+            LoanId = e.AggregateId,
+            Version = e.Version,
+            Now = DateTime.UtcNow
+        }, ct);
+    }
+
+    private async Task HandleDisbursementFailed(DisbursementFailed e, CancellationToken ct)
+    {
+        const string sql = @"
+            UPDATE rm_loan_summaries
+            SET status = 'Approved',
+                disbursed_at = NULL,
+                version = @Version,
+                updated_at = @Now
+            WHERE loan_id = @LoanId";
+
+        await _store.ExecuteAsync(sql, new
+        {
+            LoanId = e.AggregateId,
+            Version = e.Version,
+            Now = DateTime.UtcNow
+        }, ct);
     }
 
     public async Task RebuildAsync(IAsyncEnumerable<IDomainEvent> events, CancellationToken ct = default)

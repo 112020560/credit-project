@@ -1,6 +1,6 @@
 using CreditSystem.Application.Configuration;
 using CreditSystem.Domain.Abstractions;
-using CreditSystem.Domain.Abstractions.Projections;
+using CreditSystem.Domain.Abstractions.Repositories;
 using CreditSystem.Domain.Abstractions.Services;
 using CreditSystem.Domain.Exceptions;
 using CreditSystem.Domain.Models;
@@ -15,31 +15,29 @@ public class PaymentMissedJob : IPaymentMissedJob
 {
     private readonly ILoanQueryService _queryService;
     private readonly ILoanContractRepository _repository;
-    private readonly IProjectionEngine _projectionEngine;
     private readonly ILogger<PaymentMissedJob> _logger;
     private readonly LateFeeConfiguration _lateFeeConfig;
-    private readonly UnderwritingPolicy _policy;
+    private readonly IUnderwritingPolicyRepository _policyRepository;
 
     public PaymentMissedJob(
         ILoanQueryService queryService,
         ILoanContractRepository repository,
-        IProjectionEngine projectionEngine,
         IOptions<LateFeeConfiguration> lateFeeConfig,
         ILogger<PaymentMissedJob> logger,
-        UnderwritingPolicy policy)
+        IUnderwritingPolicyRepository policyRepository)
     {
         _queryService = queryService;
         _repository = repository;
-        _projectionEngine = projectionEngine;
         _lateFeeConfig = lateFeeConfig.Value;
         _logger = logger;
-        _policy = policy;
+        _policyRepository = policyRepository;
     }
 
     public async Task ExecuteAsync(CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Starting payment missed detection job at {Time}", DateTime.UtcNow);
 
+        var policy = await _policyRepository.GetActiveAsync(cancellationToken);
         var overdueLoans = await _queryService.GetLoansWithOverduePaymentsAsync(cancellationToken);
 
         _logger.LogInformation("Found {Count} loans with overdue payments", overdueLoans.Count);
@@ -51,7 +49,7 @@ public class PaymentMissedJob : IPaymentMissedJob
         {
             try
             {
-                await ProcessOverduePaymentAsync(loan, cancellationToken);
+                await ProcessOverduePaymentAsync(loan, policy, cancellationToken);
                 successCount++;
             }
             catch (Exception ex)
@@ -68,6 +66,7 @@ public class PaymentMissedJob : IPaymentMissedJob
 
     private async Task ProcessOverduePaymentAsync(
         OverdueLoanInfo loan,
+        UnderwritingPolicy policy,
         CancellationToken cancellationToken)
     {
         var aggregate = await _repository.GetByIdAsync(loan.LoanId, cancellationToken);
@@ -79,11 +78,11 @@ public class PaymentMissedJob : IPaymentMissedJob
         }
 
         // Grace period guard: skip if not yet past the grace window
-        if (loan.DaysOverdue <= _policy.GracePeriodDays)
+        if (loan.DaysOverdue <= policy.GracePeriodDays)
         {
             _logger.LogDebug(
                 "Loan {LoanId} is within grace period ({DaysOverdue} days overdue, grace = {Grace}). Skipping.",
-                loan.LoanId, loan.DaysOverdue, _policy.GracePeriodDays);
+                loan.LoanId, loan.DaysOverdue, policy.GracePeriodDays);
             return;
         }
 
@@ -91,10 +90,10 @@ public class PaymentMissedJob : IPaymentMissedJob
 
         // Penalty interest: principal × (penaltyRate/100/365) × daysOverdue
         var penaltyInterest = Money.Zero(loan.Currency);
-        if (_policy.PenaltyRate > 0)
+        if (policy.PenaltyRate > 0)
         {
             var overduePrincipal = aggregate.State.CurrentBalance.Amount;
-            var penaltyAmount = overduePrincipal * (_policy.PenaltyRate / 100m / 365m) * loan.DaysOverdue;
+            var penaltyAmount = overduePrincipal * (policy.PenaltyRate / 100m / 365m) * loan.DaysOverdue;
             penaltyInterest = new Money(penaltyAmount, loan.Currency);
         }
 
@@ -104,7 +103,7 @@ public class PaymentMissedJob : IPaymentMissedJob
                 loan.PaymentNumber,
                 loan.DueDate,
                 lateFee,
-                _policy.AutoDefaultThresholdDays,
+                policy.AutoDefaultThresholdDays,
                 penaltyInterest);
         }
         catch (DomainException ex)
@@ -115,14 +114,7 @@ public class PaymentMissedJob : IPaymentMissedJob
             return;
         }
 
-        // 4. Persistir
         await _repository.SaveAsync(aggregate, cancellationToken);
-
-        // 5. Proyectar
-        foreach (var @event in aggregate.UncommittedEvents)
-        {
-            await _projectionEngine.ProjectEventAsync(@event, cancellationToken);
-        }
 
         _logger.LogInformation(
             "Recorded missed payment #{PaymentNumber} for loan {LoanId}. Days overdue: {DaysOverdue}, Late fee: {LateFee}, Penalty interest: {PenaltyInterest}",

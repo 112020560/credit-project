@@ -1,4 +1,3 @@
-using CreditSystem.Domain.Abstractions.Projections;
 using CreditSystem.Domain.Abstractions.Repositories;
 using CreditSystem.Domain.Aggregates.RevolvingCredit.Events;
 using CreditSystem.Domain.Exceptions;
@@ -10,16 +9,13 @@ namespace CreditSystem.Application.Commands.RevolvingCredit.UnfreezeCreditLine;
 public class UnfreezeCreditLineCommandHandler : IRequestHandler<UnfreezeCreditLineCommand, UnfreezeCreditLineResponse>
 {
     private readonly IRevolvingCreditRepository _repository;
-    private readonly IProjectionEngine _projectionEngine;
     private readonly ILogger<UnfreezeCreditLineCommandHandler> _logger;
 
     public UnfreezeCreditLineCommandHandler(
         IRevolvingCreditRepository repository,
-        IProjectionEngine projectionEngine,
         ILogger<UnfreezeCreditLineCommandHandler> logger)
     {
         _repository = repository;
-        _projectionEngine = projectionEngine;
         _logger = logger;
     }
 
@@ -48,18 +44,6 @@ public class UnfreezeCreditLineCommandHandler : IRequestHandler<UnfreezeCreditLi
 
         var events = aggregate.UncommittedEvents.ToList();
         await _repository.SaveAsync(aggregate, cancellationToken);
-
-        // Proyectar a Read Models
-        try
-        {
-            await _projectionEngine.ProjectEventsAsync(events, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex,
-                "Failed to project events for credit line {CreditLineId}. Read models can be rebuilt.",
-                aggregate.Id);
-        }
 
         _logger.LogInformation("Credit line {CreditLineId} unfrozen. Reason: {Reason}",
             request.CreditLineId, request.Reason);

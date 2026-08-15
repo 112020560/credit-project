@@ -1,5 +1,4 @@
 using CreditSystem.Domain.Abstractions;
-using CreditSystem.Domain.Abstractions.Projections;
 using CreditSystem.Domain.Abstractions.Services;
 using CreditSystem.Domain.Exceptions;
 using Microsoft.Extensions.Logging;
@@ -10,18 +9,15 @@ public class InterestAccrualJob : IInterestAccrualJob
 {
     private readonly ILoanQueryService _queryService;
     private readonly ILoanContractRepository _repository;
-    private readonly IProjectionEngine _projectionEngine;
     private readonly ILogger<InterestAccrualJob> _logger;
 
     public InterestAccrualJob(
         ILoanQueryService queryService,
         ILoanContractRepository repository,
-        IProjectionEngine projectionEngine,
         ILogger<InterestAccrualJob> logger)
     {
         _queryService = queryService;
         _repository = repository;
-        _projectionEngine = projectionEngine;
         _logger = logger;
     }
 
@@ -87,14 +83,7 @@ public class InterestAccrualJob : IInterestAccrualJob
             return;
         }
 
-        // 4. Persistir
         await _repository.SaveAsync(aggregate, cancellationToken);
-
-        // 5. Proyectar
-        foreach (var @event in aggregate.UncommittedEvents)
-        {
-            await _projectionEngine.ProjectEventAsync(@event, cancellationToken);
-        }
 
         _logger.LogDebug(
             "Interest accrued for loan {LoanId}: {Amount}",

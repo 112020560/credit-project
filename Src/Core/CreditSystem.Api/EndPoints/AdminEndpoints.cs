@@ -3,7 +3,6 @@ using CreditSystem.Domain.Abstractions;
 using CreditSystem.Domain.Abstractions.Repositories;
 using CreditSystem.Domain.Aggregates.RevolvingCredit.Events;
 using CreditSystem.Domain.Exceptions;
-using CreditSystem.Infrastructure.Projections;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CreditSystem.Api.EndPoints;
@@ -87,7 +86,6 @@ public static class AdminEndpoints
     private static async Task<IResult> AccrueInterestForLoan(
         Guid id,
         [FromServices] ILoanContractRepository repository,
-        [FromServices] ProjectionEngine projectionEngine,
         CancellationToken cancellationToken)
     {
         var aggregate = await repository.GetByIdAsync(id, cancellationToken);
@@ -96,8 +94,8 @@ public static class AdminEndpoints
             return Results.NotFound();
 
         var periodEnd = DateTime.UtcNow.Date;
-        var periodStart = aggregate.State.LastInterestAccrualDate?.Date 
-            ?? aggregate.State.DisbursedAt?.Date 
+        var periodStart = aggregate.State.LastInterestAccrualDate?.Date
+            ?? aggregate.State.DisbursedAt?.Date
             ?? periodEnd.AddDays(-1);
 
         try
@@ -110,11 +108,6 @@ public static class AdminEndpoints
         }
 
         await repository.SaveAsync(aggregate, cancellationToken);
-
-        foreach (var @event in aggregate.UncommittedEvents)
-        {
-            await projectionEngine.ProjectEventAsync(@event, cancellationToken);
-        }
 
         return Results.Ok(new
         {
@@ -152,7 +145,6 @@ private static async Task<IResult> RunRevolvingPaymentMissedJob(
 private static async Task<IResult> AccrueInterestForCreditLine(
     Guid id,
     [FromServices] IRevolvingCreditRepository repository,
-    [FromServices] ProjectionEngine projectionEngine,
     CancellationToken cancellationToken)
 {
     var aggregate = await repository.GetByIdAsync(id, cancellationToken);
@@ -179,9 +171,7 @@ private static async Task<IResult> AccrueInterestForCreditLine(
         return Results.BadRequest(new { Error = ex.Message });
     }
 
-    var events = aggregate.UncommittedEvents.ToList();
-    
-    if (!events.Any())
+    if (!aggregate.UncommittedEvents.Any())
     {
         return Results.Ok(new
         {
@@ -191,11 +181,6 @@ private static async Task<IResult> AccrueInterestForCreditLine(
     }
 
     await repository.SaveAsync(aggregate, cancellationToken);
-
-    foreach (var @event in events)
-    {
-        await projectionEngine.ProjectEventAsync(@event, cancellationToken);
-    }
 
     return Results.Ok(new
     {
@@ -209,7 +194,6 @@ private static async Task<IResult> AccrueInterestForCreditLine(
 private static async Task<IResult> GenerateStatementForCreditLine(
     Guid id,
     [FromServices] IRevolvingCreditRepository repository,
-    [FromServices] ProjectionEngine projectionEngine,
     CancellationToken cancellationToken)
 {
     var aggregate = await repository.GetByIdAsync(id, cancellationToken);
@@ -228,11 +212,6 @@ private static async Task<IResult> GenerateStatementForCreditLine(
 
     var events = aggregate.UncommittedEvents.ToList();
     await repository.SaveAsync(aggregate, cancellationToken);
-
-    foreach (var @event in events)
-    {
-        await projectionEngine.ProjectEventAsync(@event, cancellationToken);
-    }
 
     var statementEvent = events.OfType<StatementGenerated>().First();
 

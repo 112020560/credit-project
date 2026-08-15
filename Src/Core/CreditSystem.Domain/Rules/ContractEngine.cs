@@ -1,16 +1,12 @@
-using CreditSystem.Domain.Models;
-
 namespace CreditSystem.Domain.Rules;
 
 public class ContractEngine
 {
     private readonly IEnumerable<IContractRule> _rules;
-    private readonly UnderwritingPolicy _policy;
 
-    public ContractEngine(IEnumerable<IContractRule> rules, UnderwritingPolicy policy)
+    public ContractEngine(IEnumerable<IContractRule> rules)
     {
         _rules = rules.OrderBy(r => r.Priority);
-        _policy = policy;
     }
 
     public async Task<ContractEvaluationResponse> EvaluateAsync(
@@ -18,7 +14,7 @@ public class ContractEngine
         decimal? baseInterestRate = null,
         CancellationToken ct = default)
     {
-        var effectiveBaseRate = baseInterestRate ?? _policy.BaseInterestRate;
+        var effectiveBaseRate = baseInterestRate ?? context.Policy.BaseInterestRate;
         var results = new List<RuleEvaluationResult>();
         var approved = true;
         var rateAdjustment = 0m;

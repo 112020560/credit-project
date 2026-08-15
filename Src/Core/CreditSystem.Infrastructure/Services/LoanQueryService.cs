@@ -1,6 +1,6 @@
 using CreditSystem.Application.Configuration;
+using CreditSystem.Domain.Abstractions.Repositories;
 using CreditSystem.Domain.Abstractions.Services;
-using CreditSystem.Domain.Models;
 using CreditSystem.Domain.Models.ReadModels;
 using Dapper;
 using Microsoft.Extensions.Options;
@@ -12,13 +12,13 @@ public class LoanQueryService: ILoanQueryService
 {
     private readonly string _connectionString;
     private readonly LateFeeConfiguration _lateFeeConfig;
-    private readonly UnderwritingPolicy _policy;
+    private readonly IUnderwritingPolicyRepository _policyRepository;
 
-    public LoanQueryService(string connectionString, IOptions<LateFeeConfiguration> lateFeeConfig, UnderwritingPolicy policy)
+    public LoanQueryService(string connectionString, IOptions<LateFeeConfiguration> lateFeeConfig, IUnderwritingPolicyRepository policyRepository)
     {
         _connectionString = connectionString;
         _lateFeeConfig = lateFeeConfig.Value;
-        _policy = policy;
+        _policyRepository = policyRepository;
     }
     public async Task<bool> HasActiveLoansAsync(Guid customerId, CancellationToken ct = default)
     {
@@ -280,8 +280,9 @@ public class LoanQueryService: ILoanQueryService
 
         await using var connection = new NpgsqlConnection(_connectionString);
 
-        // Calcular fecha de corte usando grace period de la política de suscripción
-        var cutoffDate = DateTime.UtcNow.Date.AddDays(-_policy.GracePeriodDays);
+        // Calcular fecha de corte usando grace period de la política institucional
+        var defaultPolicy = await _policyRepository.GetActiveAsync(ct);
+        var cutoffDate = DateTime.UtcNow.Date.AddDays(-defaultPolicy.GracePeriodDays);
 
         var results = await connection.QueryAsync<OverdueLoanInfo>(
             sql, new { CutoffDate = cutoffDate });
@@ -416,6 +417,30 @@ public class LoanQueryService: ILoanQueryService
 
         await using var connection = new NpgsqlConnection(_connectionString);
         var results = await connection.QueryAsync<VariableRateLoanInfo>(
+            new CommandDefinition(sql, cancellationToken: ct));
+        return results.ToList().AsReadOnly();
+    }
+
+    public async Task<IReadOnlyList<PendingDisbursementReadModel>> GetPendingDisbursementsAsync(CancellationToken ct = default)
+    {
+        const string sql = @"
+            SELECT
+                loan_id                    AS LoanId,
+                customer_id                AS CustomerId,
+                customer_name              AS CustomerName,
+                principal                  AS Principal,
+                currency                   AS Currency,
+                disbursement_method        AS DisbursementMethod,
+                destination_account        AS DestinationAccount,
+                approved_at                AS ApprovedAt,
+                disbursement_instructed_at AS DisbursementInstructedAt,
+                status                     AS Status,
+                updated_at                 AS UpdatedAt
+            FROM rm_pending_disbursements
+            ORDER BY disbursement_instructed_at ASC NULLS LAST";
+
+        await using var connection = new NpgsqlConnection(_connectionString);
+        var results = await connection.QueryAsync<PendingDisbursementReadModel>(
             new CommandDefinition(sql, cancellationToken: ct));
         return results.ToList().AsReadOnly();
     }

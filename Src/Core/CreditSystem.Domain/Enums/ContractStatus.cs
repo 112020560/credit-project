@@ -4,6 +4,7 @@ public enum ContractStatus
 {
     Draft,
     Approved,
+    Disbursing,
     Active,
     Delinquent,
     Default,

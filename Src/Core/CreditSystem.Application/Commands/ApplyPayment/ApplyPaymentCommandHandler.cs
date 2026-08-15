@@ -1,5 +1,4 @@
 using CreditSystem.Domain.Abstractions;
-using CreditSystem.Domain.Abstractions.Projections;
 using CreditSystem.Domain.Abstractions.Repositories;
 using CreditSystem.Domain.Aggregates.LoanContract.Events;
 using CreditSystem.Domain.Enums;
@@ -14,18 +13,15 @@ public class ApplyPaymentCommandHandler : IRequestHandler<ApplyPaymentCommand, A
 {
     private readonly ILoanContractRepository _repository;
     private readonly ICreditProductRepository _productRepository;
-    private readonly IProjectionEngine _projectionEngine;
     private readonly ILogger<ApplyPaymentCommandHandler> _logger;
 
     public ApplyPaymentCommandHandler(
         ILoanContractRepository repository,
         ICreditProductRepository productRepository,
-        IProjectionEngine projectionEngine,
         ILogger<ApplyPaymentCommandHandler> logger)
     {
         _repository = repository;
         _productRepository = productRepository;
-        _projectionEngine = projectionEngine;
         _logger = logger;
     }
 
@@ -97,21 +93,7 @@ public class ApplyPaymentCommandHandler : IRequestHandler<ApplyPaymentCommand, A
             return ApplyPaymentResponse.Failed("Payment event not generated");
         }
 
-        var events = aggregate.UncommittedEvents.ToList();
-
         await _repository.SaveAsync(aggregate, cancellationToken);
-
-        try
-        {
-            await _projectionEngine.ProjectEventsAsync(events, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            // Events are already persisted — projections can be rebuilt from the event store
-            _logger.LogWarning(ex,
-                "Failed to project events for loan {LoanId}. Events are persisted and read models can be rebuilt.",
-                request.LoanId);
-        }
 
         var isPaidOff = aggregate.State.Status == ContractStatus.PaidOff;
 

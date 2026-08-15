@@ -1,15 +1,12 @@
 namespace CreditSystem.Domain.Rules.Implementations;
 
-public class DebtToIncomeRule : IContractRule
+public class DebtToIncomeRule : IContractRule, IHardStopRule
 {
     public string RuleName => "DebtToIncomeRatio";
     public int Priority => 2;
 
-    private const decimal MaxDtiRatio = 0.50m; // 50%
-    private const decimal WarningDtiRatio = 0.40m; // 40%
-
     public Task<RuleEvaluationResult> EvaluateAsync(
-        ContractEvaluationContext context, 
+        ContractEvaluationContext context,
         CancellationToken ct = default)
     {
         if (context.MonthlyIncome == null || context.MonthlyIncome.Amount <= 0)
@@ -21,26 +18,30 @@ public class DebtToIncomeRule : IContractRule
             ));
         }
 
+        var policy = context.Policy;
+        var effectiveRate = context.Product?.Rates.BaseInterestRate ?? policy.BaseInterestRate;
         var monthlyDebt = context.MonthlyDebt?.Amount ?? 0;
-        var estimatedPayment = CalculateMonthlyPayment(context.RequestedAmount.Amount, context.TermMonths);
+        var estimatedPayment = CalculateMonthlyPayment(context.RequestedAmount.Amount, context.TermMonths, effectiveRate);
         var totalDebt = monthlyDebt + estimatedPayment;
         var dtiRatio = totalDebt / context.MonthlyIncome.Amount;
 
-        if (dtiRatio > MaxDtiRatio)
+        if (dtiRatio > policy.MaxDtiRatio)
         {
             return Task.FromResult(RuleEvaluationResult.Fail(
                 RuleName,
-                $"DTI ratio {dtiRatio:P2} exceeds maximum allowed {MaxDtiRatio:P0}",
+                $"DTI ratio {dtiRatio:P2} exceeds maximum allowed {policy.MaxDtiRatio:P0}",
                 new Dictionary<string, object>
                 {
                     ["DTI"] = dtiRatio,
+                    ["MaxDtiRatio"] = policy.MaxDtiRatio,
                     ["MonthlyIncome"] = context.MonthlyIncome.Amount,
                     ["TotalMonthlyDebt"] = totalDebt
                 }
             ));
         }
 
-        var rateAdjustment = dtiRatio > WarningDtiRatio ? 2.0m : 0.0m;
+        var warningThreshold = policy.MaxDtiRatio * 0.80m;
+        var rateAdjustment = dtiRatio > warningThreshold ? 2.0m : 0.0m;
 
         return Task.FromResult(RuleEvaluationResult.Pass(
             RuleName,
@@ -53,14 +54,13 @@ public class DebtToIncomeRule : IContractRule
         ));
     }
 
-    private static decimal CalculateMonthlyPayment(decimal amount, int months)
+    private static decimal CalculateMonthlyPayment(decimal amount, int months, decimal annualRatePercent)
     {
-        // Simple estimation for underwriting evaluation
-        var estimatedRate = 0.12m / 12; // 12% annual
-        if (estimatedRate == 0) return amount / months;
-        
-        var payment = amount * (estimatedRate * (decimal)Math.Pow((double)(1 + estimatedRate), months)) 
-                      / ((decimal)Math.Pow((double)(1 + estimatedRate), months) - 1);
+        var monthlyRate = annualRatePercent / 12m / 100m;
+        if (monthlyRate == 0) return amount / months;
+
+        var payment = amount * (monthlyRate * (decimal)Math.Pow((double)(1 + monthlyRate), months))
+                      / ((decimal)Math.Pow((double)(1 + monthlyRate), months) - 1);
         return payment;
     }
 }

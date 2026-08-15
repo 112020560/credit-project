@@ -42,4 +42,22 @@ public interface IEventStore
         DateTime? fromDate = null,
         int limit = 1000,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns raw event rows with sequence > fromSequence ordered by sequence ASC.
+    /// Used by ProjectionDispatcherWorker to feed projectors in stable insertion order.
+    /// </summary>
+    Task<IEnumerable<StoredEventRecord>> GetEventsSinceSequenceAsync(
+        long fromSequence,
+        int batchSize,
+        CancellationToken ct = default);
 }
+
+/// <summary>Lightweight DTO for an event row returned to the projection dispatcher.</summary>
+public record StoredEventRecord(
+    Guid Id,
+    Guid StreamId,
+    string EventType,
+    string EventData,
+    long Sequence,
+    DateTime StoredAt);

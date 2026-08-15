@@ -1,4 +1,3 @@
-using CreditSystem.Domain.Abstractions.Projections;
 using CreditSystem.Domain.Abstractions.Repositories;
 using CreditSystem.Domain.Abstractions.Services;
 using CreditSystem.Domain.Exceptions;
@@ -10,18 +9,15 @@ public class RevolvingInterestAccrualJob : IRevolvingInterestAccrualJob
 {
     private readonly IRevolvingCreditQueryService _queryService;
     private readonly IRevolvingCreditRepository _repository;
-    private readonly IProjectionEngine _projectionEngine;
     private readonly ILogger<RevolvingInterestAccrualJob> _logger;
 
     public RevolvingInterestAccrualJob(
         IRevolvingCreditQueryService queryService,
         IRevolvingCreditRepository repository,
-        IProjectionEngine projectionEngine,
         ILogger<RevolvingInterestAccrualJob> logger)
     {
         _queryService = queryService;
         _repository = repository;
-        _projectionEngine = projectionEngine;
         _logger = logger;
     }
 
@@ -100,13 +96,7 @@ public class RevolvingInterestAccrualJob : IRevolvingInterestAccrualJob
             return;
         }
 
-        var events = aggregate.UncommittedEvents.ToList();
         await _repository.SaveAsync(aggregate, cancellationToken);
-
-        foreach (var @event in events)
-        {
-            await _projectionEngine.ProjectEventAsync(@event, cancellationToken);
-        }
 
         _logger.LogDebug(
             "Interest accrued for credit line {CreditLineId}: {Amount}",

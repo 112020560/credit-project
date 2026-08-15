@@ -28,4 +28,6 @@ public interface ILoanQueryService
     Task<IReadOnlyList<LoanRiskInfo>> GetLoansForRiskClassificationAsync(CancellationToken ct = default);
 
     Task<IReadOnlyList<VariableRateLoanInfo>> GetActiveVariableRateLoansAsync(CancellationToken ct = default);
+
+    Task<IReadOnlyList<PendingDisbursementReadModel>> GetPendingDisbursementsAsync(CancellationToken ct = default);
 }

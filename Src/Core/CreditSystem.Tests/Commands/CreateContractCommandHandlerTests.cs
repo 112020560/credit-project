@@ -1,6 +1,5 @@
 using CreditSystem.Application.Commands.CreateContract;
 using CreditSystem.Domain.Abstractions;
-using CreditSystem.Domain.Abstractions.Projections;
 using CreditSystem.Domain.Abstractions.Repositories;
 using CreditSystem.Domain.Abstractions.Services;
 using CreditSystem.Domain.Entities;
@@ -23,9 +22,9 @@ public class CreateContractCommandHandlerTests
     private readonly ICreditProductRepository _productRepo = Substitute.For<ICreditProductRepository>();
     private readonly ILoanGuaranteeRepository _guaranteeRepo = Substitute.For<ILoanGuaranteeRepository>();
     private readonly ILoanQueryService _queryService = Substitute.For<ILoanQueryService>();
-    private readonly IProjectionEngine _projectionEngine = Substitute.For<IProjectionEngine>();
     private readonly IAmortizationCalculatorFactory _calcFactory = Substitute.For<IAmortizationCalculatorFactory>();
     private readonly IReferenceRateRepository _referenceRateRepo = Substitute.For<IReferenceRateRepository>();
+    private readonly IUnderwritingPolicyRepository _policyRepo = Substitute.For<IUnderwritingPolicyRepository>();
 
     private static readonly UnderwritingPolicy DefaultPolicy =
         new(8.0m, 90, NoScoreBehavior.ApproveWithPenalty, 5, false);
@@ -46,12 +45,14 @@ public class CreateContractCommandHandlerTests
     private CreateContractCommandHandler BuildHandler()
     {
         // Use an engine with no rules so every contract is approved with just the base rate
-        var engine = new ContractEngine([], DefaultPolicy);
+        var engine = new ContractEngine([]);
 
         var calculator = Substitute.For<IAmortizationCalculator>();
         calculator.Calculate(Arg.Any<Money>(), Arg.Any<InterestRate>(), Arg.Any<int>(), Arg.Any<DateTime>())
             .Returns(new PaymentSchedule([]));
         _calcFactory.GetCalculator(Arg.Any<AmortizationMethod>()).Returns(calculator);
+
+        _policyRepo.GetByIdAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(DefaultPolicy);
 
         return new CreateContractCommandHandler(
             _loanRepo,
@@ -61,9 +62,8 @@ public class CreateContractCommandHandlerTests
             _guaranteeRepo,
             _queryService,
             engine,
-            DefaultPolicy,
+            _policyRepo,
             _calcFactory,
-            _projectionEngine,
             _referenceRateRepo,
             NullLogger<CreateContractCommandHandler>.Instance);
     }

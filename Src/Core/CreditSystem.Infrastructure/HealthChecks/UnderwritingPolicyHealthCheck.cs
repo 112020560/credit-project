@@ -1,23 +1,31 @@
-using CreditSystem.Domain.Models;
+using CreditSystem.Domain.Abstractions.Repositories;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace CreditSystem.Infrastructure.HealthChecks;
 
 public class UnderwritingPolicyHealthCheck : IHealthCheck
 {
-    private readonly UnderwritingPolicy? _policy;
+    private readonly IUnderwritingPolicyRepository _repository;
 
-    public UnderwritingPolicyHealthCheck(UnderwritingPolicy? policy = null)
+    public UnderwritingPolicyHealthCheck(IUnderwritingPolicyRepository repository)
     {
-        _policy = policy;
+        _repository = repository;
     }
 
-    public Task<HealthCheckResult> CheckHealthAsync(
+    public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
-        return _policy is not null
-            ? Task.FromResult(HealthCheckResult.Healthy("UnderwritingPolicy is loaded"))
-            : Task.FromResult(HealthCheckResult.Unhealthy("UnderwritingPolicy is not loaded"));
+        try
+        {
+            var policy = await _repository.GetByIdAsync("default", cancellationToken);
+            return policy is not null
+                ? HealthCheckResult.Healthy("UnderwritingPolicy 'default' is accessible")
+                : HealthCheckResult.Unhealthy("UnderwritingPolicy 'default' not found in database");
+        }
+        catch (Exception ex)
+        {
+            return HealthCheckResult.Unhealthy("Failed to load UnderwritingPolicy", ex);
+        }
     }
 }
