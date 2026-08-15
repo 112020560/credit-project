@@ -1,8 +1,7 @@
-using System;
 using Crm.Application.Abstractions.Messaging;
+using Crm.Application.Customers.Dtos;
 using Crm.Domain.Abstractions.Persistence;
 using Crm.Domain.Customers;
-using MediatR;
 using SharedKernel;
 
 namespace Crm.Application.Customers;
@@ -21,11 +20,23 @@ internal sealed class GetCustomerByIdQueryHandler : IQueryHandler<GetCustomerByI
     public async Task<Result<CustomerModel>> Handle(GetCustomerByIdQuery request, CancellationToken cancellationToken)
     {
         var customer = await _unitOfWork.CustomersRepository.GetCustomerByIdAsync(request.CustomerId, cancellationToken);
-        if(customer is null)
+        if (customer is null)
         {
             return Result.Failure<CustomerModel>(CustomerError.NotFound(request.CustomerId));
         }
-        return customer.ConvertToModel();
+
+        return new CustomerModel
+        {
+            Id = customer.Id,
+            ExternalCode = customer.ExternalCode,
+            IdentificationType = customer.IdentificationType,
+            IdentificationNumber = customer.IdentificationNumber,
+            FullName = customer.FullName,
+            DisplayName = customer.DisplayName,
+            BirthDate = customer.BirthDate,
+            Status = customer.Status,
+            CreatedAt = customer.CreatedAt,
+            UpdatedAt = customer.UpdatedAt,
+        };
     }
 }
-

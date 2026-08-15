@@ -4,6 +4,7 @@ using Crm.Domain.Customers;
 using Crm.Domain.Documents;
 using Crm.Domain.Prospects;
 using Crm.Domain.RiskEngine;
+using Crm.Domain.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 
 namespace Crm.Infrastructure.Adapters.Outbound.EntityFramework;
@@ -21,27 +22,12 @@ public partial class CrmDbContext : DbContext
 
     public virtual DbSet<Customer> Customers { get; set; }
 
-    public virtual DbSet<CustomerAddress> CustomerAddresses { get; set; }
-
     public virtual DbSet<CustomerDocument> CustomerDocuments { get; set; }
 
-    public virtual DbSet<CustomerEmail> CustomerEmails { get; set; }
-
-    public virtual DbSet<CustomerFiscalInfo> CustomerFiscalInfos { get; set; }
-
-    public virtual DbSet<CustomerPhone> CustomerPhones { get; set; }
-
-    public virtual DbSet<CustomerWorkInfo> CustomerWorkInfos { get; set; }
-
-    public virtual DbSet<CustomersRef> CustomersRefs { get; set; }
+    public virtual DbSet<ExternalCustomerRef> ExternalCustomerRefs { get; set; }
 
     // Prospects
     public virtual DbSet<Prospect> Prospects { get; set; }
-    public virtual DbSet<ProspectAddress> ProspectAddresses { get; set; }
-    public virtual DbSet<ProspectPhone> ProspectPhones { get; set; }
-    public virtual DbSet<ProspectEmail> ProspectEmails { get; set; }
-    public virtual DbSet<ProspectWorkInfo> ProspectWorkInfos { get; set; }
-    public virtual DbSet<ProspectFiscalInfo> ProspectFiscalInfos { get; set; }
 
     // Credit Applications
     public virtual DbSet<CreditApplication> CreditApplications { get; set; }
@@ -76,6 +62,14 @@ public partial class CrmDbContext : DbContext
     {
         modelBuilder.HasPostgresExtension("uuid-ossp");
 
+        // Explicitly declare value object records as owned entity types,
+        // preventing EF Core 9 from auto-detecting them as complex types.
+        modelBuilder.Owned<Address>();
+        modelBuilder.Owned<EmailContact>();
+        modelBuilder.Owned<PhoneContact>();
+        modelBuilder.Owned<WorkInfo>();
+        modelBuilder.Owned<FiscalInfo>();
+
         modelBuilder.Entity<Customer>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("customers_pkey");
@@ -104,43 +98,97 @@ public partial class CrmDbContext : DbContext
             entity.Property(e => e.UpdatedAt)
                 .HasDefaultValueSql("now()")
                 .HasColumnName("updated_at");
-        });
+            entity.Property(e => e.CreditScore)
+                .HasPrecision(10, 4)
+                .HasColumnName("credit_score");
+            entity.Property(e => e.MonthlyIncome)
+                .HasPrecision(18, 2)
+                .HasColumnName("monthly_income");
+            entity.Property(e => e.MonthlyDebt)
+                .HasPrecision(18, 2)
+                .HasColumnName("monthly_debt");
 
-        modelBuilder.Entity<CustomerAddress>(entity =>
-        {
-            entity.HasKey(e => e.Id).HasName("customer_addresses_pkey");
+            entity.Ignore(e => e.DomainEvents);
 
-            entity.ToTable("customer_addresses");
+            entity.OwnsMany(c => c.CustomerAddresses, a =>
+            {
+                a.ToTable("customer_addresses");
+                a.Property<Guid>("Id").HasColumnName("id").HasDefaultValueSql("uuid_generate_v4()");
+                a.HasKey("Id");
+                a.WithOwner().HasForeignKey("CustomerId");
+                a.Property<Guid>("CustomerId").HasColumnName("customer_id");
+                a.Property(x => x.Type).HasColumnName("type");
+                a.Property(x => x.Street).HasColumnName("street");
+                a.Property(x => x.City).HasColumnName("city");
+                a.Property(x => x.State).HasColumnName("state");
+                a.Property(x => x.Country).HasColumnName("country");
+                a.Property(x => x.PostalCode).HasColumnName("postal_code");
+                a.Property(x => x.IsPrimary).HasColumnName("is_primary").HasDefaultValue(false);
+                a.Property(x => x.District).HasColumnName("district");
+                a.Property(x => x.Metadata).HasColumnName("metadata").HasColumnType("jsonb");
+                a.Property<DateTime>("CreatedAt").HasColumnName("created_at").HasDefaultValueSql("now()");
+                a.Property<DateTime>("UpdatedAt").HasColumnName("updated_at").HasDefaultValueSql("now()");
+            });
 
-            entity.HasIndex(e => e.CustomerId, "ix_customer_addresses_customer");
+            entity.OwnsMany(c => c.CustomerEmails, a =>
+            {
+                a.ToTable("customer_emails");
+                a.Property<Guid>("Id").HasColumnName("id").HasDefaultValueSql("uuid_generate_v4()");
+                a.HasKey("Id");
+                a.WithOwner().HasForeignKey("CustomerId");
+                a.Property<Guid>("CustomerId").HasColumnName("customer_id");
+                a.Property(x => x.Email).HasColumnName("email");
+                a.Property(x => x.IsPrimary).HasColumnName("is_primary").HasDefaultValue(false);
+                a.Property(x => x.Verified).HasColumnName("verified").HasDefaultValue(false);
+                a.Property<DateTime>("CreatedAt").HasColumnName("created_at").HasDefaultValueSql("now()");
+            });
 
-            entity.Property(e => e.Id)
-                .HasDefaultValueSql("uuid_generate_v4()")
-                .HasColumnName("id");
-            entity.Property(e => e.City).HasColumnName("city");
-            entity.Property(e => e.Country).HasColumnName("country");
-            entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("now()")
-                .HasColumnName("created_at");
-            entity.Property(e => e.CustomerId).HasColumnName("customer_id");
-            entity.Property(e => e.District).HasColumnName("district");
-            entity.Property(e => e.IsPrimary)
-                .HasDefaultValue(false)
-                .HasColumnName("is_primary");
-            entity.Property(e => e.Metadata)
-                .HasColumnType("jsonb")
-                .HasColumnName("metadata");
-            entity.Property(e => e.PostalCode).HasColumnName("postal_code");
-            entity.Property(e => e.State).HasColumnName("state");
-            entity.Property(e => e.Street).HasColumnName("street");
-            entity.Property(e => e.Type).HasColumnName("type");
-            entity.Property(e => e.UpdatedAt)
-                .HasDefaultValueSql("now()")
-                .HasColumnName("updated_at");
+            entity.OwnsMany(c => c.CustomerPhones, a =>
+            {
+                a.ToTable("customer_phones");
+                a.Property<Guid>("Id").HasColumnName("id").HasDefaultValueSql("uuid_generate_v4()");
+                a.HasKey("Id");
+                a.WithOwner().HasForeignKey("CustomerId");
+                a.Property<Guid>("CustomerId").HasColumnName("customer_id");
+                a.Property(x => x.Number).HasColumnName("number");
+                a.Property(x => x.Type).HasColumnName("type");
+                a.Property(x => x.CountryCode).HasColumnName("country_code");
+                a.Property(x => x.IsPrimary).HasColumnName("is_primary").HasDefaultValue(false);
+                a.Property(x => x.Verified).HasColumnName("verified").HasDefaultValue(false);
+                a.Property<DateTime>("CreatedAt").HasColumnName("created_at").HasDefaultValueSql("now()");
+            });
 
-            entity.HasOne(d => d.Customer).WithMany(p => p.CustomerAddresses)
-                .HasForeignKey(d => d.CustomerId)
-                .HasConstraintName("customer_addresses_customer_id_fkey");
+            entity.OwnsMany(c => c.CustomerFiscalInfos, a =>
+            {
+                a.ToTable("customer_fiscal_info");
+                a.Property<Guid>("Id").HasColumnName("id").HasDefaultValueSql("uuid_generate_v4()");
+                a.HasKey("Id");
+                a.WithOwner().HasForeignKey("CustomerId");
+                a.Property<Guid>("CustomerId").HasColumnName("customer_id");
+                a.Property(x => x.TaxId).HasColumnName("tax_id");
+                a.Property(x => x.TaxRegime).HasColumnName("tax_regime");
+                a.Property(x => x.EconomicActivity).HasColumnName("economic_activity");
+                a.Property(x => x.Industry).HasColumnName("industry");
+                a.Property(x => x.Metadata).HasColumnName("metadata").HasColumnType("jsonb");
+                a.Property<DateTime>("CreatedAt").HasColumnName("created_at").HasDefaultValueSql("now()");
+                a.Property<DateTime>("UpdatedAt").HasColumnName("updated_at").HasDefaultValueSql("now()");
+            });
+
+            entity.OwnsMany(c => c.CustomerWorkInfos, a =>
+            {
+                a.ToTable("customer_work_info");
+                a.Property<Guid>("Id").HasColumnName("id").HasDefaultValueSql("uuid_generate_v4()");
+                a.HasKey("Id");
+                a.WithOwner().HasForeignKey("CustomerId");
+                a.Property<Guid>("CustomerId").HasColumnName("customer_id");
+                a.Property(x => x.Occupation).HasColumnName("occupation");
+                a.Property(x => x.EmployerName).HasColumnName("employer_name");
+                a.Property(x => x.Salary).HasPrecision(18, 2).HasColumnName("salary");
+                a.Property(x => x.WorkAddress).HasColumnName("work_address").HasColumnType("jsonb");
+                a.Property(x => x.Metadata).HasColumnName("metadata").HasColumnType("jsonb");
+                a.Property<DateTime>("CreatedAt").HasColumnName("created_at").HasDefaultValueSql("now()");
+                a.Property<DateTime>("UpdatedAt").HasColumnName("updated_at").HasDefaultValueSql("now()");
+            });
         });
 
         modelBuilder.Entity<CustomerDocument>(entity =>
@@ -169,129 +217,7 @@ public partial class CrmDbContext : DbContext
                 .HasConstraintName("customer_documents_customer_id_fkey");
         });
 
-        modelBuilder.Entity<CustomerEmail>(entity =>
-        {
-            entity.HasKey(e => e.Id).HasName("customer_emails_pkey");
-
-            entity.ToTable("customer_emails");
-
-            entity.HasIndex(e => new { e.CustomerId, e.Email }, "ux_customer_emails_customer_email");
-
-            entity.Property(e => e.Id)
-                .HasDefaultValueSql("uuid_generate_v4()")
-                .HasColumnName("id");
-            entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("now()")
-                .HasColumnName("created_at");
-            entity.Property(e => e.CustomerId).HasColumnName("customer_id");
-            entity.Property(e => e.Email).HasColumnName("email");
-            entity.Property(e => e.IsPrimary)
-                .HasDefaultValue(false)
-                .HasColumnName("is_primary");
-            entity.Property(e => e.Verified)
-                .HasDefaultValue(false)
-                .HasColumnName("verified");
-
-            entity.HasOne(d => d.Customer).WithMany(p => p.CustomerEmails)
-                .HasForeignKey(d => d.CustomerId)
-                .HasConstraintName("customer_emails_customer_id_fkey");
-        });
-
-        modelBuilder.Entity<CustomerFiscalInfo>(entity =>
-        {
-            entity.HasKey(e => e.Id).HasName("customer_fiscal_info_pkey");
-
-            entity.ToTable("customer_fiscal_info");
-
-            entity.HasIndex(e => e.CustomerId, "ix_customer_fiscal_customer");
-
-            entity.Property(e => e.Id)
-                .HasDefaultValueSql("uuid_generate_v4()")
-                .HasColumnName("id");
-            entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("now()")
-                .HasColumnName("created_at");
-            entity.Property(e => e.CustomerId).HasColumnName("customer_id");
-            entity.Property(e => e.EconomicActivity).HasColumnName("economic_activity");
-            entity.Property(e => e.Industry).HasColumnName("industry");
-            entity.Property(e => e.Metadata)
-                .HasColumnType("jsonb")
-                .HasColumnName("metadata");
-            entity.Property(e => e.TaxId).HasColumnName("tax_id");
-            entity.Property(e => e.TaxRegime).HasColumnName("tax_regime");
-            entity.Property(e => e.UpdatedAt)
-                .HasDefaultValueSql("now()")
-                .HasColumnName("updated_at");
-
-            entity.HasOne(d => d.Customer).WithMany(p => p.CustomerFiscalInfos)
-                .HasForeignKey(d => d.CustomerId)
-                .HasConstraintName("customer_fiscal_info_customer_id_fkey");
-        });
-
-        modelBuilder.Entity<CustomerPhone>(entity =>
-        {
-            entity.HasKey(e => e.Id).HasName("customer_phones_pkey");
-
-            entity.ToTable("customer_phones");
-
-            entity.HasIndex(e => new { e.CustomerId, e.Number }, "ux_customer_phones_customer_number");
-
-            entity.Property(e => e.Id)
-                .HasDefaultValueSql("uuid_generate_v4()")
-                .HasColumnName("id");
-            entity.Property(e => e.CountryCode).HasColumnName("country_code");
-            entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("now()")
-                .HasColumnName("created_at");
-            entity.Property(e => e.CustomerId).HasColumnName("customer_id");
-            entity.Property(e => e.IsPrimary)
-                .HasDefaultValue(false)
-                .HasColumnName("is_primary");
-            entity.Property(e => e.Number).HasColumnName("number");
-            entity.Property(e => e.Type).HasColumnName("type");
-            entity.Property(e => e.Verified)
-                .HasDefaultValue(false)
-                .HasColumnName("verified");
-
-            entity.HasOne(d => d.Customer).WithMany(p => p.CustomerPhones)
-                .HasForeignKey(d => d.CustomerId)
-                .HasConstraintName("customer_phones_customer_id_fkey");
-        });
-
-        modelBuilder.Entity<CustomerWorkInfo>(entity =>
-        {
-            entity.HasKey(e => e.Id).HasName("customer_work_info_pkey");
-
-            entity.ToTable("customer_work_info");
-
-            entity.Property(e => e.Id)
-                .HasDefaultValueSql("uuid_generate_v4()")
-                .HasColumnName("id");
-            entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("now()")
-                .HasColumnName("created_at");
-            entity.Property(e => e.CustomerId).HasColumnName("customer_id");
-            entity.Property(e => e.EmployerName).HasColumnName("employer_name");
-            entity.Property(e => e.Metadata)
-                .HasColumnType("jsonb")
-                .HasColumnName("metadata");
-            entity.Property(e => e.Occupation).HasColumnName("occupation");
-            entity.Property(e => e.Salary)
-                .HasPrecision(18, 2)
-                .HasColumnName("salary");
-            entity.Property(e => e.UpdatedAt)
-                .HasDefaultValueSql("now()")
-                .HasColumnName("updated_at");
-            entity.Property(e => e.WorkAddress)
-                .HasColumnType("jsonb")
-                .HasColumnName("work_address");
-
-            entity.HasOne(d => d.Customer).WithMany(p => p.CustomerWorkInfos)
-                .HasForeignKey(d => d.CustomerId)
-                .HasConstraintName("customer_work_info_customer_id_fkey");
-        });
-
-        modelBuilder.Entity<CustomersRef>(entity =>
+        modelBuilder.Entity<ExternalCustomerRef>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("customers_ref_pkey");
 
@@ -338,86 +264,88 @@ public partial class CrmDbContext : DbContext
             entity.Property(e => e.Status).HasDefaultValueSql("'Draft'::text").HasColumnName("status");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()").HasColumnName("created_at");
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()").HasColumnName("updated_at");
-        });
 
-        modelBuilder.Entity<ProspectAddress>(entity =>
-        {
-            entity.HasKey(e => e.Id).HasName("prospect_addresses_pkey");
-            entity.ToTable("prospect_addresses");
-            entity.HasIndex(e => e.ProspectId, "ix_prospect_addresses_prospect");
-            entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()").HasColumnName("id");
-            entity.Property(e => e.ProspectId).HasColumnName("prospect_id");
-            entity.Property(e => e.Type).HasColumnName("type");
-            entity.Property(e => e.Street).HasColumnName("street");
-            entity.Property(e => e.City).HasColumnName("city");
-            entity.Property(e => e.State).HasColumnName("state");
-            entity.Property(e => e.Country).HasColumnName("country");
-            entity.Property(e => e.PostalCode).HasColumnName("postal_code");
-            entity.Property(e => e.IsPrimary).HasDefaultValue(false).HasColumnName("is_primary");
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()").HasColumnName("created_at");
-            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()").HasColumnName("updated_at");
-            entity.HasOne(d => d.Prospect).WithMany(p => p.Addresses).HasForeignKey(d => d.ProspectId).HasConstraintName("prospect_addresses_prospect_id_fkey");
-        });
+            entity.Ignore(e => e.DomainEvents);
 
-        modelBuilder.Entity<ProspectPhone>(entity =>
-        {
-            entity.HasKey(e => e.Id).HasName("prospect_phones_pkey");
-            entity.ToTable("prospect_phones");
-            entity.HasIndex(e => new { e.ProspectId, e.Number }, "ux_prospect_phones_prospect_number");
-            entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()").HasColumnName("id");
-            entity.Property(e => e.ProspectId).HasColumnName("prospect_id");
-            entity.Property(e => e.Type).HasColumnName("type");
-            entity.Property(e => e.Number).HasColumnName("number");
-            entity.Property(e => e.CountryCode).HasColumnName("country_code");
-            entity.Property(e => e.IsPrimary).HasDefaultValue(false).HasColumnName("is_primary");
-            entity.Property(e => e.Verified).HasDefaultValue(false).HasColumnName("verified");
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()").HasColumnName("created_at");
-            entity.HasOne(d => d.Prospect).WithMany(p => p.Phones).HasForeignKey(d => d.ProspectId).HasConstraintName("prospect_phones_prospect_id_fkey");
-        });
+            entity.OwnsMany(p => p.Addresses, a =>
+            {
+                a.ToTable("prospect_addresses");
+                a.Property<Guid>("Id").HasColumnName("id").HasDefaultValueSql("uuid_generate_v4()");
+                a.HasKey("Id");
+                a.WithOwner().HasForeignKey("ProspectId");
+                a.Property<Guid>("ProspectId").HasColumnName("prospect_id");
+                a.Property(x => x.Type).HasColumnName("type");
+                a.Property(x => x.Street).HasColumnName("street");
+                a.Property(x => x.City).HasColumnName("city");
+                a.Property(x => x.State).HasColumnName("state");
+                a.Property(x => x.Country).HasColumnName("country");
+                a.Property(x => x.PostalCode).HasColumnName("postal_code");
+                a.Property(x => x.IsPrimary).HasColumnName("is_primary").HasDefaultValue(false);
+                a.Property(x => x.District).HasColumnName("district");
+                a.Property(x => x.Metadata).HasColumnName("metadata").HasColumnType("jsonb");
+                a.Property<DateTime>("CreatedAt").HasColumnName("created_at").HasDefaultValueSql("now()");
+                a.Property<DateTime>("UpdatedAt").HasColumnName("updated_at").HasDefaultValueSql("now()");
+            });
 
-        modelBuilder.Entity<ProspectEmail>(entity =>
-        {
-            entity.HasKey(e => e.Id).HasName("prospect_emails_pkey");
-            entity.ToTable("prospect_emails");
-            entity.HasIndex(e => new { e.ProspectId, e.Email }, "ux_prospect_emails_prospect_email");
-            entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()").HasColumnName("id");
-            entity.Property(e => e.ProspectId).HasColumnName("prospect_id");
-            entity.Property(e => e.Email).HasColumnName("email");
-            entity.Property(e => e.IsPrimary).HasDefaultValue(false).HasColumnName("is_primary");
-            entity.Property(e => e.Verified).HasDefaultValue(false).HasColumnName("verified");
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()").HasColumnName("created_at");
-            entity.HasOne(d => d.Prospect).WithMany(p => p.Emails).HasForeignKey(d => d.ProspectId).HasConstraintName("prospect_emails_prospect_id_fkey");
-        });
+            entity.OwnsMany(p => p.Phones, a =>
+            {
+                a.ToTable("prospect_phones");
+                a.Property<Guid>("Id").HasColumnName("id").HasDefaultValueSql("uuid_generate_v4()");
+                a.HasKey("Id");
+                a.WithOwner().HasForeignKey("ProspectId");
+                a.Property<Guid>("ProspectId").HasColumnName("prospect_id");
+                a.Property(x => x.Number).HasColumnName("number");
+                a.Property(x => x.Type).HasColumnName("type");
+                a.Property(x => x.CountryCode).HasColumnName("country_code");
+                a.Property(x => x.IsPrimary).HasColumnName("is_primary").HasDefaultValue(false);
+                a.Property(x => x.Verified).HasColumnName("verified").HasDefaultValue(false);
+                a.Property<DateTime>("CreatedAt").HasColumnName("created_at").HasDefaultValueSql("now()");
+            });
 
-        modelBuilder.Entity<ProspectWorkInfo>(entity =>
-        {
-            entity.HasKey(e => e.Id).HasName("prospect_work_info_pkey");
-            entity.ToTable("prospect_work_info");
-            entity.HasIndex(e => e.ProspectId, "ix_prospect_work_info_prospect");
-            entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()").HasColumnName("id");
-            entity.Property(e => e.ProspectId).HasColumnName("prospect_id");
-            entity.Property(e => e.Occupation).HasColumnName("occupation");
-            entity.Property(e => e.EmployerName).HasColumnName("employer_name");
-            entity.Property(e => e.Salary).HasPrecision(18, 2).HasColumnName("salary");
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()").HasColumnName("created_at");
-            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()").HasColumnName("updated_at");
-            entity.HasOne(d => d.Prospect).WithMany(p => p.WorkInfos).HasForeignKey(d => d.ProspectId).HasConstraintName("prospect_work_info_prospect_id_fkey");
-        });
+            entity.OwnsMany(p => p.Emails, a =>
+            {
+                a.ToTable("prospect_emails");
+                a.Property<Guid>("Id").HasColumnName("id").HasDefaultValueSql("uuid_generate_v4()");
+                a.HasKey("Id");
+                a.WithOwner().HasForeignKey("ProspectId");
+                a.Property<Guid>("ProspectId").HasColumnName("prospect_id");
+                a.Property(x => x.Email).HasColumnName("email");
+                a.Property(x => x.IsPrimary).HasColumnName("is_primary").HasDefaultValue(false);
+                a.Property(x => x.Verified).HasColumnName("verified").HasDefaultValue(false);
+                a.Property<DateTime>("CreatedAt").HasColumnName("created_at").HasDefaultValueSql("now()");
+            });
 
-        modelBuilder.Entity<ProspectFiscalInfo>(entity =>
-        {
-            entity.HasKey(e => e.Id).HasName("prospect_fiscal_info_pkey");
-            entity.ToTable("prospect_fiscal_info");
-            entity.HasIndex(e => e.ProspectId, "ix_prospect_fiscal_info_prospect");
-            entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()").HasColumnName("id");
-            entity.Property(e => e.ProspectId).HasColumnName("prospect_id");
-            entity.Property(e => e.TaxId).HasColumnName("tax_id");
-            entity.Property(e => e.TaxRegime).HasColumnName("tax_regime");
-            entity.Property(e => e.EconomicActivity).HasColumnName("economic_activity");
-            entity.Property(e => e.Industry).HasColumnName("industry");
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()").HasColumnName("created_at");
-            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()").HasColumnName("updated_at");
-            entity.HasOne(d => d.Prospect).WithMany(p => p.FiscalInfos).HasForeignKey(d => d.ProspectId).HasConstraintName("prospect_fiscal_info_prospect_id_fkey");
+            entity.OwnsMany(p => p.WorkInfos, a =>
+            {
+                a.ToTable("prospect_work_info");
+                a.Property<Guid>("Id").HasColumnName("id").HasDefaultValueSql("uuid_generate_v4()");
+                a.HasKey("Id");
+                a.WithOwner().HasForeignKey("ProspectId");
+                a.Property<Guid>("ProspectId").HasColumnName("prospect_id");
+                a.Property(x => x.Occupation).HasColumnName("occupation");
+                a.Property(x => x.EmployerName).HasColumnName("employer_name");
+                a.Property(x => x.Salary).HasPrecision(18, 2).HasColumnName("salary");
+                a.Property(x => x.WorkAddress).HasColumnName("work_address");
+                a.Property(x => x.Metadata).HasColumnName("metadata").HasColumnType("jsonb");
+                a.Property<DateTime>("CreatedAt").HasColumnName("created_at").HasDefaultValueSql("now()");
+                a.Property<DateTime>("UpdatedAt").HasColumnName("updated_at").HasDefaultValueSql("now()");
+            });
+
+            entity.OwnsMany(p => p.FiscalInfos, a =>
+            {
+                a.ToTable("prospect_fiscal_info");
+                a.Property<Guid>("Id").HasColumnName("id").HasDefaultValueSql("uuid_generate_v4()");
+                a.HasKey("Id");
+                a.WithOwner().HasForeignKey("ProspectId");
+                a.Property<Guid>("ProspectId").HasColumnName("prospect_id");
+                a.Property(x => x.TaxId).HasColumnName("tax_id");
+                a.Property(x => x.TaxRegime).HasColumnName("tax_regime");
+                a.Property(x => x.EconomicActivity).HasColumnName("economic_activity");
+                a.Property(x => x.Industry).HasColumnName("industry");
+                a.Property(x => x.Metadata).HasColumnName("metadata").HasColumnType("jsonb");
+                a.Property<DateTime>("CreatedAt").HasColumnName("created_at").HasDefaultValueSql("now()");
+                a.Property<DateTime>("UpdatedAt").HasColumnName("updated_at").HasDefaultValueSql("now()");
+            });
         });
 
         modelBuilder.Entity<CreditApplication>(entity =>
@@ -432,6 +360,7 @@ public partial class CrmDbContext : DbContext
             entity.Property(e => e.WorkflowDefinitionId).HasColumnName("workflow_definition_id");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()").HasColumnName("created_at");
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()").HasColumnName("updated_at");
+            entity.Ignore(e => e.DomainEvents);
         });
 
         modelBuilder.Entity<ApplicationDocument>(entity =>
@@ -474,6 +403,7 @@ public partial class CrmDbContext : DbContext
             entity.Property(e => e.AutoRejectThreshold).HasPrecision(10, 4).HasColumnName("auto_reject_threshold");
             entity.Property(e => e.PricingBands).HasColumnType("jsonb").HasColumnName("pricing_bands");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()").HasColumnName("created_at");
+            entity.Ignore(e => e.DomainEvents);
         });
 
         modelBuilder.Entity<RiskMatrixRule>(entity =>
@@ -534,6 +464,7 @@ public partial class CrmDbContext : DbContext
             entity.Property(e => e.Name).HasColumnName("name");
             entity.Property(e => e.Status).HasDefaultValueSql("'Draft'::text").HasColumnName("status");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()").HasColumnName("created_at");
+            entity.Ignore(e => e.DomainEvents);
         });
 
         modelBuilder.Entity<WorkflowStep>(entity =>

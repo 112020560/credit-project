@@ -1,16 +1,18 @@
+using System.Text.Json;
 using Crm.Application.Abstractions.Messaging;
-using Crm.Application.Abstractions.Mq;
 using Crm.Application.Documents.Dtos;
 using Crm.Domain.Abstractions.Persistence;
 using Crm.Domain.Documents;
 using FluentValidation;
 using SharedKernel;
+using SmartCore.Outbox.Abstractions;
+using SmartCore.Outbox.Models;
 
 namespace Crm.Application.Documents;
 
 public record ValidateDocumentCommand(Guid DocumentId, ValidateDocumentDto Dto) : ICommand;
 
-internal sealed class ValidateDocumentCommandHandler(IUnitOfWork unitOfWork, IMqProducerService mqProducerService)
+internal sealed class ValidateDocumentCommandHandler(IUnitOfWork unitOfWork, IOutboxWriter outbox)
     : ICommandHandler<ValidateDocumentCommand>
 {
     public async Task<Result> Handle(ValidateDocumentCommand request, CancellationToken cancellationToken)
@@ -42,18 +44,29 @@ internal sealed class ValidateDocumentCommandHandler(IUnitOfWork unitOfWork, IMq
         await unitOfWork.DocumentsRepository.UpdateAsync(document, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var traceId = Guid.NewGuid().ToString("N");
         if (document.Status == DocumentStatus.Validated)
         {
-            await mqProducerService.PublishEvent(
-                new DocumentValidatedContract(document.Id, document.OwnerId, document.OwnerType, validation.ReviewedBy, validation.ReviewedAt),
-                traceId, cancellationToken);
+            await outbox.AppendAsync(new OutboxEvent
+            {
+                ServiceName      = "crm",
+                AggregateId      = document.Id,
+                AggregateType    = "Document",
+                EventType        = "DocumentValidated",
+                DeduplicationKey = $"DocumentValidated:{document.Id}",
+                Payload          = JsonSerializer.Serialize(new DocumentValidatedContract(document.Id, document.OwnerId, document.OwnerType, validation.ReviewedBy, validation.ReviewedAt))
+            }, cancellationToken);
         }
         else
         {
-            await mqProducerService.PublishEvent(
-                new DocumentRejectedContract(document.Id, document.OwnerId, document.OwnerType, validation.RejectionReason, validation.ReviewedBy, validation.ReviewedAt),
-                traceId, cancellationToken);
+            await outbox.AppendAsync(new OutboxEvent
+            {
+                ServiceName      = "crm",
+                AggregateId      = document.Id,
+                AggregateType    = "Document",
+                EventType        = "DocumentRejected",
+                DeduplicationKey = $"DocumentRejected:{document.Id}",
+                Payload          = JsonSerializer.Serialize(new DocumentRejectedContract(document.Id, document.OwnerId, document.OwnerType, validation.RejectionReason, validation.ReviewedBy, validation.ReviewedAt))
+            }, cancellationToken);
         }
 
         return Result.Success();

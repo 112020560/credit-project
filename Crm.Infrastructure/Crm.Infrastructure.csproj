@@ -8,6 +8,7 @@
 
     <ItemGroup>
       <PackageReference Include="AspNetCore.HealthChecks.NpgSql" Version="9.0.0" />
+      <PackageReference Include="SmartCore.Outbox" Version="1.1.0" />
       <PackageReference Include="MassTransit" Version="8.5.7" />
       <PackageReference Include="MassTransit.RabbitMQ" Version="8.5.7" />
       <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.11" />

@@ -1,18 +1,20 @@
-using Crm.Application.Abstractions.Mq;
+using System.Text.Json;
 using Crm.Application.ApprovalWorkflows.Dtos;
-using Crm.Application.CreditApplications;
 using Crm.Application.Customers.Dtos;
 using Crm.Application.Prospects.Dtos;
 using Crm.Domain.Abstractions.Persistence;
 using Crm.Domain.ApprovalWorkflows;
 using Crm.Domain.CreditApplications;
+using Crm.Domain.Customers;
 using Crm.Domain.Prospects;
 using SharedKernel;
 using SharedKernel.Contracts.Crm.Customers;
+using SmartCore.Outbox.Abstractions;
+using SmartCore.Outbox.Models;
 
 namespace Crm.Application.ApprovalWorkflows;
 
-public class ApprovalWorkflowService(IUnitOfWork unitOfWork, IMqProducerService mqProducerService)
+public class ApprovalWorkflowService(IUnitOfWork unitOfWork, IOutboxWriter outbox)
 {
     public async Task<Result> RecordDecisionAsync(
         CreditApplication application,
@@ -52,27 +54,28 @@ public class ApprovalWorkflowService(IUnitOfWork unitOfWork, IMqProducerService 
         };
         await unitOfWork.ApprovalDecisionsRepository.AddAsync(approvalDecision, cancellationToken);
 
-        var traceId = Guid.NewGuid().ToString("N");
-
         if (decision == ApprovalDecisionOutcome.Rejected)
         {
             var prospect = await unitOfWork.ProspectsRepository.GetByIdAsync(application.ProspectId, cancellationToken);
             if (prospect is not null)
             {
-                prospect.Status = ProspectStatus.Draft;
-                prospect.UpdatedAt = DateTime.UtcNow;
+                prospect.Reject();
                 await unitOfWork.ProspectsRepository.UpdateAsync(prospect, cancellationToken);
             }
 
-            application.Status = CreditApplicationStatus.Rejected;
-            application.RejectionReason = rejectionReason;
-            application.UpdatedAt = DateTime.UtcNow;
+            application.Reject(rejectionReason);
             await unitOfWork.CreditApplicationsRepository.UpdateAsync(application, cancellationToken);
             await unitOfWork.SaveChangesAsync(cancellationToken);
 
-            await mqProducerService.PublishEvent(
-                new ApplicationRejectedContract(application.Id, application.ProspectId, workflow?.Id, rejectionReason, approvalDecision.DecidedAt),
-                traceId, cancellationToken);
+            await outbox.AppendAsync(new OutboxEvent
+            {
+                ServiceName      = "crm",
+                AggregateId      = application.Id,
+                AggregateType    = "CreditApplication",
+                EventType        = "CreditApplicationRejected",
+                DeduplicationKey = $"CreditApplicationRejected:{application.Id}",
+                Payload          = JsonSerializer.Serialize(new ApplicationRejectedContract(application.Id, application.ProspectId, workflow?.Id, rejectionReason, approvalDecision.DecidedAt))
+            }, cancellationToken);
 
             return Result.Success();
         }
@@ -88,39 +91,74 @@ public class ApprovalWorkflowService(IUnitOfWork unitOfWork, IMqProducerService 
             if (prospect is null)
                 return Result.Failure(ProspectError.NotFound(application.ProspectId));
 
-            var customer = ApproveCreditApplicationCommandHandler.MapProspectToCustomer(prospect);
+            var customer = Customer.FromProspect(prospect);
             await unitOfWork.CustomersRepository.AddCustomerAsync(customer, cancellationToken);
 
-            prospect.Status = ProspectStatus.Converted;
-            prospect.UpdatedAt = DateTime.UtcNow;
+            prospect.Convert();
             await unitOfWork.ProspectsRepository.UpdateAsync(prospect, cancellationToken);
 
-            application.Status = CreditApplicationStatus.Approved;
-            application.UpdatedAt = DateTime.UtcNow;
+            application.Approve();
             await unitOfWork.CreditApplicationsRepository.UpdateAsync(application, cancellationToken);
             await unitOfWork.SaveChangesAsync(cancellationToken);
 
-            await mqProducerService.PublishEvent(
-                new ApplicationApprovedContract(application.Id, application.ProspectId, workflow?.Id, approvalDecision.DecidedAt),
-                traceId, cancellationToken);
-            await mqProducerService.PublishEvent(new ProspectConvertedContract { ProspectId = prospect.Id, CustomerId = customer.Id }, traceId, cancellationToken);
+            await outbox.AppendAsync(new OutboxEvent
+            {
+                ServiceName      = "crm",
+                AggregateId      = application.Id,
+                AggregateType    = "CreditApplication",
+                EventType        = "CreditApplicationApproved",
+                DeduplicationKey = $"CreditApplicationApproved:{application.Id}",
+                Payload          = JsonSerializer.Serialize(new ApplicationApprovedContract(application.Id, application.ProspectId, workflow?.Id, approvalDecision.DecidedAt))
+            }, cancellationToken);
+
+            await outbox.AppendAsync(new OutboxEvent
+            {
+                ServiceName      = "crm",
+                AggregateId      = prospect.Id,
+                AggregateType    = "Prospect",
+                EventType        = "ProspectConverted",
+                DeduplicationKey = $"ProspectConverted:{prospect.Id}",
+                Payload          = JsonSerializer.Serialize(new ProspectConvertedContract { ProspectId = prospect.Id, CustomerId = customer.Id })
+            }, cancellationToken);
+
+            var evaluations = await unitOfWork.RiskEvaluationsRepository.GetByCreditApplicationIdAsync(application.Id, cancellationToken);
+            var latestEval = evaluations.OrderByDescending(e => e.EvaluatedAt).FirstOrDefault();
 
             var contract = new CreateCustomerContract
             {
-                CustomerId = customer.Id,
-                FullName = customer.FullName,
-                DisplayName = customer.DisplayName ?? string.Empty,
-                IdentificationType = customer.IdentificationType,
+                CustomerId           = customer.Id,
+                FullName             = customer.FullName,
+                DisplayName          = customer.DisplayName ?? string.Empty,
+                IdentificationType   = customer.IdentificationType,
                 IdentificationNumber = customer.IdentificationNumber ?? string.Empty,
-                TaxId = prospect.FiscalInfos.FirstOrDefault()?.TaxId,
-                Email = customer.CustomerEmails.FirstOrDefault(e => e.IsPrimary == true)?.Email ?? customer.CustomerEmails.FirstOrDefault()?.Email,
-                Phone = customer.CustomerPhones.FirstOrDefault(p => p.IsPrimary == true)?.Number ?? customer.CustomerPhones.FirstOrDefault()?.Number,
-                CreatedAt = DateTimeOffset.UtcNow,
-                Version = 1,
-                Metadata = null
+                TaxId                = prospect.FiscalInfos.FirstOrDefault()?.TaxId,
+                Email                = customer.CustomerEmails.FirstOrDefault(e => e.IsPrimary == true)?.Email ?? customer.CustomerEmails.FirstOrDefault()?.Email,
+                Phone                = customer.CustomerPhones.FirstOrDefault(p => p.IsPrimary == true)?.Number ?? customer.CustomerPhones.FirstOrDefault()?.Number,
+                CreatedAt            = DateTimeOffset.UtcNow,
+                Version              = 1,
+                Metadata             = latestEval is not null ? new Dictionary<string, object> { ["CreditScore"] = latestEval.TotalScore } : null
             };
-            await mqProducerService.SendCommand<CustomerCreated>(contract, "credit-service-customer-events", traceId, cancellationToken);
-            await mqProducerService.PublishEvent(contract, traceId, cancellationToken);
+            var customerPayload = JsonSerializer.Serialize(contract);
+
+            await outbox.AppendAsync(new OutboxEvent
+            {
+                ServiceName      = "crm",
+                AggregateId      = customer.Id,
+                AggregateType    = "Customer",
+                EventType        = "CustomerCreated",
+                DeduplicationKey = $"CustomerCreated:{customer.Id}",
+                Payload          = customerPayload
+            }, cancellationToken);
+
+            await outbox.AppendAsync(new OutboxEvent
+            {
+                ServiceName      = "crm",
+                AggregateId      = customer.Id,
+                AggregateType    = "Customer",
+                EventType        = "CustomerCreatedCommand",
+                DeduplicationKey = $"CustomerCreatedCommand:{customer.Id}",
+                Payload          = customerPayload
+            }, cancellationToken);
         }
         else
         {
@@ -128,9 +166,15 @@ public class ApprovalWorkflowService(IUnitOfWork unitOfWork, IMqProducerService 
             await unitOfWork.SaveChangesAsync(cancellationToken);
 
             var nextStep = workflow!.Steps.OrderBy(s => s.Order).First(s => s.Order > pendingStep!.Order);
-            await mqProducerService.PublishEvent(
-                new ApprovalRequestedContract(application.Id, workflow.Id, nextStep.Id, nextStep.StepName, nextStep.Order, DateTime.UtcNow),
-                traceId, cancellationToken);
+            await outbox.AppendAsync(new OutboxEvent
+            {
+                ServiceName      = "crm",
+                AggregateId      = application.Id,
+                AggregateType    = "CreditApplication",
+                EventType        = "ApprovalRequested",
+                DeduplicationKey = $"ApprovalRequested:{application.Id}:{nextStep.Id}",
+                Payload          = JsonSerializer.Serialize(new ApprovalRequestedContract(application.Id, workflow.Id, nextStep.Id, nextStep.StepName, nextStep.Order, DateTime.UtcNow))
+            }, cancellationToken);
         }
 
         return Result.Success();

@@ -2,13 +2,15 @@
 
 using System.Text.Json;
 using Crm.Application.Abstractions.Messaging;
-using Crm.Application.Abstractions.Mq;
 using Crm.Application.Customers.Dtos;
 using Crm.Domain.Abstractions.Persistence;
 using Crm.Domain.Customers;
+using Crm.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;
 using SharedKernel;
 using SharedKernel.Contracts.Crm.Customers;
+using SmartCore.Outbox.Abstractions;
+using SmartCore.Outbox.Models;
 
 namespace Crm.Application.Customers;
 
@@ -18,12 +20,12 @@ internal sealed class CreateCustomerCommandHandler : ICommandHandler<CreateCusto
 {
     private readonly ILogger<CreateCustomerCommandHandler> _logger;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IMqProducerService _mqProducerService;
-    public CreateCustomerCommandHandler(ILogger<CreateCustomerCommandHandler> logger, IUnitOfWork unitOfWork, IMqProducerService mqProducerService)
+    private readonly IOutboxWriter _outbox;
+    public CreateCustomerCommandHandler(ILogger<CreateCustomerCommandHandler> logger, IUnitOfWork unitOfWork, IOutboxWriter outbox)
     {
         _logger = logger;
         _unitOfWork = unitOfWork;
-        _mqProducerService = mqProducerService;
+        _outbox = outbox;
     }
     public async Task<Result<CustomerSummaryDto>> Handle(CreateCustomerCommand request, CancellationToken cancellationToken)
     {
@@ -44,17 +46,46 @@ internal sealed class CreateCustomerCommandHandler : ICommandHandler<CreateCusto
             Phone = dto.Contacts?.FirstOrDefault(x => x.Type == "Phone")?.Value,
             CreatedAt = DateTimeOffset.UtcNow,
             Version = 1,
-            Metadata = null
+            Metadata = BuildMetadata(customer)
         };
+        var payload = JsonSerializer.Serialize(contract);
 
-        // Send to credit service queue (point-to-point)
-        await _mqProducerService.SendCommand<CustomerCreated>(contract, "credit-service-customer-events", Guid.NewGuid().ToString("N"), cancellationToken);
+        // Broadcast event to all subscribers
+        await _outbox.AppendAsync(new OutboxEvent
+        {
+            ServiceName     = "crm",
+            AggregateId     = customer.Id,
+            AggregateType   = "Customer",
+            EventType       = "CustomerCreated",
+            DeduplicationKey = $"CustomerCreated:{customer.Id}",
+            Payload         = payload
+        }, cancellationToken);
 
-        // Broadcast publish so other services (Retail, etc.) can subscribe
-        await _mqProducerService.PublishEvent(contract, Guid.NewGuid().ToString("N"), cancellationToken);
+        // Point-to-point command to credit service
+        await _outbox.AppendAsync(new OutboxEvent
+        {
+            ServiceName     = "crm",
+            AggregateId     = customer.Id,
+            AggregateType   = "Customer",
+            EventType       = "CustomerCreatedCommand",
+            DeduplicationKey = $"CustomerCreatedCommand:{customer.Id}",
+            Payload         = payload
+        }, cancellationToken);
 
         return new CustomerSummaryDto(customer.Id, customer.FullName, customer.DisplayName ?? string.Empty, customer.IdentificationNumber ?? string.Empty);
 
+    }
+
+    private static IDictionary<string, object>? BuildMetadata(Customer customer)
+    {
+        if (customer.CreditScore is null && customer.MonthlyIncome is null && customer.MonthlyDebt is null)
+            return null;
+
+        var metadata = new Dictionary<string, object>();
+        if (customer.CreditScore is not null) metadata["CreditScore"] = customer.CreditScore;
+        if (customer.MonthlyIncome is not null) metadata["MonthlyIncome"] = customer.MonthlyIncome;
+        if (customer.MonthlyDebt is not null) metadata["MonthlyDebt"] = customer.MonthlyDebt;
+        return metadata;
     }
 
     private static Customer MapToDto(CreateCustomerDto dto)
@@ -67,56 +98,17 @@ internal sealed class CreateCustomerCommandHandler : ICommandHandler<CreateCusto
             FullName = dto.FullName,
             DisplayName = dto.DisplayName,
             BirthDate = dto.BirthDate,
-            Status = "Active",
+            Status = CustomerStatus.Active,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
-            CustomerAddresses = [.. (dto.Addresses ?? []).Select(x => new CustomerAddress
-            {
-                Id = Guid.CreateVersion7(),
-                Type = x.Type,
-                Street = x.Street,
-                City = x.City,
-                State = x.State,
-                Country = x.Country,
-                PostalCode = x.PostalCode,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
-                IsPrimary = x.IsPrimary,
-            })],
-            CustomerPhones = [.. (dto.Contacts ?? []).Where(x => x.Type == "Phone").Select(x => new CustomerPhone
-            {
-                Id = Guid.CreateVersion7(),
-                Type = x.Type,
-                Number = x.Value,
-                CreatedAt = DateTime.UtcNow,
-                IsPrimary = x.IsPrimary,
-                Verified = false,
-            })],
-            CustomerEmails = [.. (dto.Contacts ?? []).Where(x => x.Type == "Email").Select(x => new CustomerEmail
-            {
-                Id = Guid.CreateVersion7(),
-                Email = x.Value,
-                CreatedAt = DateTime.UtcNow,
-                IsPrimary = x.IsPrimary,
-                Verified = false,
-            })],
-            CustomerWorkInfos = [.. (dto.WorkInfos ?? []).Select(x => new CustomerWorkInfo
-            {
-                Id = Guid.CreateVersion7(),
-                Occupation = x.Occupation,
-                EmployerName = x.EmployerName,
-                Salary = x.Salary,
-                WorkAddress = JsonSerializer.Serialize((dto.Addresses ?? []).Where(a => a.Type == "Work").Select(a => new
-                {
-                    a.Street,
-                    a.City,
-                    a.State,
-                    a.Country,
-                    a.PostalCode,
-                }).FirstOrDefault()),
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
-            })]
+            CreditScore = dto.CreditScore,
+            MonthlyIncome = dto.MonthlyIncome,
+            MonthlyDebt = dto.MonthlyDebt,
+            CustomerAddresses = [.. (dto.Addresses ?? []).Select(x => new Address(x.Type, x.Street, x.City, x.State, x.Country, x.PostalCode, x.IsPrimary))],
+            CustomerPhones = [.. (dto.Contacts ?? []).Where(x => x.Type == "Phone").Select(x => new PhoneContact(x.Value, x.Type, null, x.IsPrimary, false))],
+            CustomerEmails = [.. (dto.Contacts ?? []).Where(x => x.Type == "Email").Select(x => new EmailContact(x.Value, x.IsPrimary, false))],
+            CustomerWorkInfos = [.. (dto.WorkInfos ?? []).Select(x => new WorkInfo(x.Occupation, x.EmployerName, x.Salary,
+                WorkAddress: JsonSerializer.Serialize((dto.Addresses ?? []).Where(a => a.Type == "Work").Select(a => new { a.Street, a.City, a.State, a.Country, a.PostalCode }).FirstOrDefault())))]
         };
     }
 }

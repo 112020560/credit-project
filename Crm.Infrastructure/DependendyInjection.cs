@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using SmartCore.Outbox.Extensions;
 
 namespace Crm.Infrastructure;
 
@@ -22,7 +23,19 @@ public static class DependencyInjection
             .ConfigurePersistenceService(configuration)
             .AddHealthChecks(configuration)
             .AddProducerService(configuration)
-            .AddHttpClientsServices(configuration);
+            .AddHttpClientsServices(configuration)
+            .AddOutboxService(configuration);
+
+    private static IServiceCollection AddOutboxService(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddSmartOutbox(options =>
+        {
+            options.ConnectionString = configuration["Outbox:ConnectionString"]
+                ?? throw new Exception("Outbox:ConnectionString configuration is required");
+            options.ServiceName = "crm";
+        });
+        return services;
+    }
     private static IServiceCollection ConfigurePersistenceService(this IServiceCollection services,
         IConfiguration configuration)
     {
@@ -50,6 +63,7 @@ public static class DependencyInjection
         services.AddScoped<IDocumentTypesRepository, DocumentTypesRepository>();
         services.AddScoped<IWorkflowDefinitionsRepository, WorkflowDefinitionsRepository>();
         services.AddScoped<IApprovalDecisionsRepository, ApprovalDecisionsRepository>();
+        services.AddScoped<IExternalCustomerRefRepository, ExternalCustomerRefRepository>();
 
         services.AddScoped<IRiskEngine, RiskEngineService>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();

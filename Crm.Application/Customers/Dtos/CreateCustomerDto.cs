@@ -10,4 +10,7 @@ public record CreateCustomerDto
     DateOnly? BirthDate,
     IEnumerable<AddressDto>? Addresses,
     IEnumerable<ContactDto>? Contacts,
-    IEnumerable<CustomerWorkInfoDto>? WorkInfos);
+    IEnumerable<CustomerWorkInfoDto>? WorkInfos,
+    decimal? CreditScore = null,
+    decimal? MonthlyIncome = null,
+    decimal? MonthlyDebt = null);

@@ -251,6 +251,11 @@ namespace Crm.Infrastructure.Migrations
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
 
+                    b.Property<decimal?>("CreditScore")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("numeric(10,4)")
+                        .HasColumnName("credit_score");
+
                     b.Property<string>("DisplayName")
                         .HasColumnType("text")
                         .HasColumnName("display_name");
@@ -271,6 +276,16 @@ namespace Crm.Infrastructure.Migrations
                     b.Property<string>("IdentificationType")
                         .HasColumnType("text")
                         .HasColumnName("identification_type");
+
+                    b.Property<decimal?>("MonthlyDebt")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("monthly_debt");
+
+                    b.Property<decimal?>("MonthlyIncome")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("monthly_income");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -293,77 +308,6 @@ namespace Crm.Infrastructure.Migrations
                     b.HasIndex(new[] { "IdentificationNumber" }, "ix_customers_identification");
 
                     b.ToTable("customers", (string)null);
-                });
-
-            modelBuilder.Entity("Crm.Domain.Customers.CustomerAddress", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id")
-                        .HasDefaultValueSql("uuid_generate_v4()");
-
-                    b.Property<string>("City")
-                        .HasColumnType("text")
-                        .HasColumnName("city");
-
-                    b.Property<string>("Country")
-                        .HasColumnType("text")
-                        .HasColumnName("country");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<Guid>("CustomerId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("customer_id");
-
-                    b.Property<string>("District")
-                        .HasColumnType("text")
-                        .HasColumnName("district");
-
-                    b.Property<bool?>("IsPrimary")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("is_primary");
-
-                    b.Property<string>("Metadata")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("metadata");
-
-                    b.Property<string>("PostalCode")
-                        .HasColumnType("text")
-                        .HasColumnName("postal_code");
-
-                    b.Property<string>("State")
-                        .HasColumnType("text")
-                        .HasColumnName("state");
-
-                    b.Property<string>("Street")
-                        .HasColumnType("text")
-                        .HasColumnName("street");
-
-                    b.Property<string>("Type")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("type");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at")
-                        .HasDefaultValueSql("now()");
-
-                    b.HasKey("Id")
-                        .HasName("customer_addresses_pkey");
-
-                    b.HasIndex(new[] { "CustomerId" }, "ix_customer_addresses_customer");
-
-                    b.ToTable("customer_addresses", (string)null);
                 });
 
             modelBuilder.Entity("Crm.Domain.Customers.CustomerDocument", b =>
@@ -406,206 +350,7 @@ namespace Crm.Infrastructure.Migrations
                     b.ToTable("customer_documents", (string)null);
                 });
 
-            modelBuilder.Entity("Crm.Domain.Customers.CustomerEmail", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id")
-                        .HasDefaultValueSql("uuid_generate_v4()");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<Guid>("CustomerId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("customer_id");
-
-                    b.Property<string>("Email")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("email");
-
-                    b.Property<bool?>("IsPrimary")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("is_primary");
-
-                    b.Property<bool?>("Verified")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("verified");
-
-                    b.HasKey("Id")
-                        .HasName("customer_emails_pkey");
-
-                    b.HasIndex(new[] { "CustomerId", "Email" }, "ux_customer_emails_customer_email");
-
-                    b.ToTable("customer_emails", (string)null);
-                });
-
-            modelBuilder.Entity("Crm.Domain.Customers.CustomerFiscalInfo", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id")
-                        .HasDefaultValueSql("uuid_generate_v4()");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<Guid>("CustomerId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("customer_id");
-
-                    b.Property<string>("EconomicActivity")
-                        .HasColumnType("text")
-                        .HasColumnName("economic_activity");
-
-                    b.Property<string>("Industry")
-                        .HasColumnType("text")
-                        .HasColumnName("industry");
-
-                    b.Property<string>("Metadata")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("metadata");
-
-                    b.Property<string>("TaxId")
-                        .HasColumnType("text")
-                        .HasColumnName("tax_id");
-
-                    b.Property<string>("TaxRegime")
-                        .HasColumnType("text")
-                        .HasColumnName("tax_regime");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at")
-                        .HasDefaultValueSql("now()");
-
-                    b.HasKey("Id")
-                        .HasName("customer_fiscal_info_pkey");
-
-                    b.HasIndex(new[] { "CustomerId" }, "ix_customer_fiscal_customer");
-
-                    b.ToTable("customer_fiscal_info", (string)null);
-                });
-
-            modelBuilder.Entity("Crm.Domain.Customers.CustomerPhone", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id")
-                        .HasDefaultValueSql("uuid_generate_v4()");
-
-                    b.Property<string>("CountryCode")
-                        .HasColumnType("text")
-                        .HasColumnName("country_code");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<Guid>("CustomerId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("customer_id");
-
-                    b.Property<bool?>("IsPrimary")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("is_primary");
-
-                    b.Property<string>("Number")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("number");
-
-                    b.Property<string>("Type")
-                        .HasColumnType("text")
-                        .HasColumnName("type");
-
-                    b.Property<bool?>("Verified")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("verified");
-
-                    b.HasKey("Id")
-                        .HasName("customer_phones_pkey");
-
-                    b.HasIndex(new[] { "CustomerId", "Number" }, "ux_customer_phones_customer_number");
-
-                    b.ToTable("customer_phones", (string)null);
-                });
-
-            modelBuilder.Entity("Crm.Domain.Customers.CustomerWorkInfo", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id")
-                        .HasDefaultValueSql("uuid_generate_v4()");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<Guid>("CustomerId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("customer_id");
-
-                    b.Property<string>("EmployerName")
-                        .HasColumnType("text")
-                        .HasColumnName("employer_name");
-
-                    b.Property<string>("Metadata")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("metadata");
-
-                    b.Property<string>("Occupation")
-                        .HasColumnType("text")
-                        .HasColumnName("occupation");
-
-                    b.Property<decimal?>("Salary")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("salary");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<string>("WorkAddress")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("work_address");
-
-                    b.HasKey("Id")
-                        .HasName("customer_work_info_pkey");
-
-                    b.HasIndex("CustomerId");
-
-                    b.ToTable("customer_work_info", (string)null);
-                });
-
-            modelBuilder.Entity("Crm.Domain.Customers.CustomersRef", b =>
+            modelBuilder.Entity("Crm.Domain.Customers.ExternalCustomerRef", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -838,253 +583,6 @@ namespace Crm.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("prospects", (string)null);
-                });
-
-            modelBuilder.Entity("Crm.Domain.Prospects.ProspectAddress", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id")
-                        .HasDefaultValueSql("uuid_generate_v4()");
-
-                    b.Property<string>("City")
-                        .HasColumnType("text")
-                        .HasColumnName("city");
-
-                    b.Property<string>("Country")
-                        .HasColumnType("text")
-                        .HasColumnName("country");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<bool>("IsPrimary")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("is_primary");
-
-                    b.Property<string>("PostalCode")
-                        .HasColumnType("text")
-                        .HasColumnName("postal_code");
-
-                    b.Property<Guid>("ProspectId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("prospect_id");
-
-                    b.Property<string>("State")
-                        .HasColumnType("text")
-                        .HasColumnName("state");
-
-                    b.Property<string>("Street")
-                        .HasColumnType("text")
-                        .HasColumnName("street");
-
-                    b.Property<string>("Type")
-                        .HasColumnType("text")
-                        .HasColumnName("type");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at")
-                        .HasDefaultValueSql("now()");
-
-                    b.HasKey("Id")
-                        .HasName("prospect_addresses_pkey");
-
-                    b.HasIndex(new[] { "ProspectId" }, "ix_prospect_addresses_prospect");
-
-                    b.ToTable("prospect_addresses", (string)null);
-                });
-
-            modelBuilder.Entity("Crm.Domain.Prospects.ProspectEmail", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id")
-                        .HasDefaultValueSql("uuid_generate_v4()");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<string>("Email")
-                        .HasColumnType("text")
-                        .HasColumnName("email");
-
-                    b.Property<bool>("IsPrimary")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("is_primary");
-
-                    b.Property<Guid>("ProspectId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("prospect_id");
-
-                    b.Property<bool>("Verified")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("verified");
-
-                    b.HasKey("Id")
-                        .HasName("prospect_emails_pkey");
-
-                    b.HasIndex(new[] { "ProspectId", "Email" }, "ux_prospect_emails_prospect_email");
-
-                    b.ToTable("prospect_emails", (string)null);
-                });
-
-            modelBuilder.Entity("Crm.Domain.Prospects.ProspectFiscalInfo", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id")
-                        .HasDefaultValueSql("uuid_generate_v4()");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<string>("EconomicActivity")
-                        .HasColumnType("text")
-                        .HasColumnName("economic_activity");
-
-                    b.Property<string>("Industry")
-                        .HasColumnType("text")
-                        .HasColumnName("industry");
-
-                    b.Property<Guid>("ProspectId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("prospect_id");
-
-                    b.Property<string>("TaxId")
-                        .HasColumnType("text")
-                        .HasColumnName("tax_id");
-
-                    b.Property<string>("TaxRegime")
-                        .HasColumnType("text")
-                        .HasColumnName("tax_regime");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at")
-                        .HasDefaultValueSql("now()");
-
-                    b.HasKey("Id")
-                        .HasName("prospect_fiscal_info_pkey");
-
-                    b.HasIndex(new[] { "ProspectId" }, "ix_prospect_fiscal_info_prospect");
-
-                    b.ToTable("prospect_fiscal_info", (string)null);
-                });
-
-            modelBuilder.Entity("Crm.Domain.Prospects.ProspectPhone", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id")
-                        .HasDefaultValueSql("uuid_generate_v4()");
-
-                    b.Property<string>("CountryCode")
-                        .HasColumnType("text")
-                        .HasColumnName("country_code");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<bool>("IsPrimary")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("is_primary");
-
-                    b.Property<string>("Number")
-                        .HasColumnType("text")
-                        .HasColumnName("number");
-
-                    b.Property<Guid>("ProspectId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("prospect_id");
-
-                    b.Property<string>("Type")
-                        .HasColumnType("text")
-                        .HasColumnName("type");
-
-                    b.Property<bool>("Verified")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("verified");
-
-                    b.HasKey("Id")
-                        .HasName("prospect_phones_pkey");
-
-                    b.HasIndex(new[] { "ProspectId", "Number" }, "ux_prospect_phones_prospect_number");
-
-                    b.ToTable("prospect_phones", (string)null);
-                });
-
-            modelBuilder.Entity("Crm.Domain.Prospects.ProspectWorkInfo", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id")
-                        .HasDefaultValueSql("uuid_generate_v4()");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<string>("EmployerName")
-                        .HasColumnType("text")
-                        .HasColumnName("employer_name");
-
-                    b.Property<string>("Occupation")
-                        .HasColumnType("text")
-                        .HasColumnName("occupation");
-
-                    b.Property<Guid>("ProspectId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("prospect_id");
-
-                    b.Property<decimal?>("Salary")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("salary");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at")
-                        .HasDefaultValueSql("now()");
-
-                    b.HasKey("Id")
-                        .HasName("prospect_work_info_pkey");
-
-                    b.HasIndex(new[] { "ProspectId" }, "ix_prospect_work_info_prospect");
-
-                    b.ToTable("prospect_work_info", (string)null);
                 });
 
             modelBuilder.Entity("Crm.Domain.RiskEngine.RiskEvaluation", b =>
@@ -1343,16 +841,296 @@ namespace Crm.Infrastructure.Migrations
                     b.Navigation("CreditApplication");
                 });
 
-            modelBuilder.Entity("Crm.Domain.Customers.CustomerAddress", b =>
+            modelBuilder.Entity("Crm.Domain.Customers.Customer", b =>
                 {
-                    b.HasOne("Crm.Domain.Customers.Customer", "Customer")
-                        .WithMany("CustomerAddresses")
-                        .HasForeignKey("CustomerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("customer_addresses_customer_id_fkey");
+                    b.OwnsMany("Crm.Domain.ValueObjects.Address", "CustomerAddresses", b1 =>
+                        {
+                            b1.Property<Guid>("Id")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("uuid")
+                                .HasColumnName("id")
+                                .HasDefaultValueSql("uuid_generate_v4()");
 
-                    b.Navigation("Customer");
+                            b1.Property<string>("City")
+                                .HasColumnType("text")
+                                .HasColumnName("city");
+
+                            b1.Property<string>("Country")
+                                .HasColumnType("text")
+                                .HasColumnName("country");
+
+                            b1.Property<DateTime>("CreatedAt")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("created_at")
+                                .HasDefaultValueSql("now()");
+
+                            b1.Property<Guid>("CustomerId")
+                                .HasColumnType("uuid")
+                                .HasColumnName("customer_id");
+
+                            b1.Property<string>("District")
+                                .HasColumnType("text")
+                                .HasColumnName("district");
+
+                            b1.Property<bool?>("IsPrimary")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("boolean")
+                                .HasDefaultValue(false)
+                                .HasColumnName("is_primary");
+
+                            b1.Property<string>("Metadata")
+                                .HasColumnType("jsonb")
+                                .HasColumnName("metadata");
+
+                            b1.Property<string>("PostalCode")
+                                .HasColumnType("text")
+                                .HasColumnName("postal_code");
+
+                            b1.Property<string>("State")
+                                .HasColumnType("text")
+                                .HasColumnName("state");
+
+                            b1.Property<string>("Street")
+                                .HasColumnType("text")
+                                .HasColumnName("street");
+
+                            b1.Property<string>("Type")
+                                .HasColumnType("text")
+                                .HasColumnName("type");
+
+                            b1.Property<DateTime>("UpdatedAt")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("updated_at")
+                                .HasDefaultValueSql("now()");
+
+                            b1.HasKey("Id");
+
+                            b1.HasIndex("CustomerId");
+
+                            b1.ToTable("customer_addresses", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("CustomerId");
+                        });
+
+                    b.OwnsMany("Crm.Domain.ValueObjects.EmailContact", "CustomerEmails", b1 =>
+                        {
+                            b1.Property<Guid>("Id")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("uuid")
+                                .HasColumnName("id")
+                                .HasDefaultValueSql("uuid_generate_v4()");
+
+                            b1.Property<DateTime>("CreatedAt")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("created_at")
+                                .HasDefaultValueSql("now()");
+
+                            b1.Property<Guid>("CustomerId")
+                                .HasColumnType("uuid")
+                                .HasColumnName("customer_id");
+
+                            b1.Property<string>("Email")
+                                .IsRequired()
+                                .HasColumnType("text")
+                                .HasColumnName("email");
+
+                            b1.Property<bool?>("IsPrimary")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("boolean")
+                                .HasDefaultValue(false)
+                                .HasColumnName("is_primary");
+
+                            b1.Property<bool?>("Verified")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("boolean")
+                                .HasDefaultValue(false)
+                                .HasColumnName("verified");
+
+                            b1.HasKey("Id");
+
+                            b1.HasIndex("CustomerId");
+
+                            b1.ToTable("customer_emails", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("CustomerId");
+                        });
+
+                    b.OwnsMany("Crm.Domain.ValueObjects.FiscalInfo", "CustomerFiscalInfos", b1 =>
+                        {
+                            b1.Property<Guid>("Id")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("uuid")
+                                .HasColumnName("id")
+                                .HasDefaultValueSql("uuid_generate_v4()");
+
+                            b1.Property<DateTime>("CreatedAt")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("created_at")
+                                .HasDefaultValueSql("now()");
+
+                            b1.Property<Guid>("CustomerId")
+                                .HasColumnType("uuid")
+                                .HasColumnName("customer_id");
+
+                            b1.Property<string>("EconomicActivity")
+                                .HasColumnType("text")
+                                .HasColumnName("economic_activity");
+
+                            b1.Property<string>("Industry")
+                                .HasColumnType("text")
+                                .HasColumnName("industry");
+
+                            b1.Property<string>("Metadata")
+                                .HasColumnType("jsonb")
+                                .HasColumnName("metadata");
+
+                            b1.Property<string>("TaxId")
+                                .HasColumnType("text")
+                                .HasColumnName("tax_id");
+
+                            b1.Property<string>("TaxRegime")
+                                .HasColumnType("text")
+                                .HasColumnName("tax_regime");
+
+                            b1.Property<DateTime>("UpdatedAt")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("updated_at")
+                                .HasDefaultValueSql("now()");
+
+                            b1.HasKey("Id");
+
+                            b1.HasIndex("CustomerId");
+
+                            b1.ToTable("customer_fiscal_info", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("CustomerId");
+                        });
+
+                    b.OwnsMany("Crm.Domain.ValueObjects.PhoneContact", "CustomerPhones", b1 =>
+                        {
+                            b1.Property<Guid>("Id")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("uuid")
+                                .HasColumnName("id")
+                                .HasDefaultValueSql("uuid_generate_v4()");
+
+                            b1.Property<string>("CountryCode")
+                                .HasColumnType("text")
+                                .HasColumnName("country_code");
+
+                            b1.Property<DateTime>("CreatedAt")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("created_at")
+                                .HasDefaultValueSql("now()");
+
+                            b1.Property<Guid>("CustomerId")
+                                .HasColumnType("uuid")
+                                .HasColumnName("customer_id");
+
+                            b1.Property<bool?>("IsPrimary")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("boolean")
+                                .HasDefaultValue(false)
+                                .HasColumnName("is_primary");
+
+                            b1.Property<string>("Number")
+                                .IsRequired()
+                                .HasColumnType("text")
+                                .HasColumnName("number");
+
+                            b1.Property<string>("Type")
+                                .HasColumnType("text")
+                                .HasColumnName("type");
+
+                            b1.Property<bool?>("Verified")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("boolean")
+                                .HasDefaultValue(false)
+                                .HasColumnName("verified");
+
+                            b1.HasKey("Id");
+
+                            b1.HasIndex("CustomerId");
+
+                            b1.ToTable("customer_phones", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("CustomerId");
+                        });
+
+                    b.OwnsMany("Crm.Domain.ValueObjects.WorkInfo", "CustomerWorkInfos", b1 =>
+                        {
+                            b1.Property<Guid>("Id")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("uuid")
+                                .HasColumnName("id")
+                                .HasDefaultValueSql("uuid_generate_v4()");
+
+                            b1.Property<DateTime>("CreatedAt")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("created_at")
+                                .HasDefaultValueSql("now()");
+
+                            b1.Property<Guid>("CustomerId")
+                                .HasColumnType("uuid")
+                                .HasColumnName("customer_id");
+
+                            b1.Property<string>("EmployerName")
+                                .HasColumnType("text")
+                                .HasColumnName("employer_name");
+
+                            b1.Property<string>("Metadata")
+                                .HasColumnType("jsonb")
+                                .HasColumnName("metadata");
+
+                            b1.Property<string>("Occupation")
+                                .HasColumnType("text")
+                                .HasColumnName("occupation");
+
+                            b1.Property<decimal?>("Salary")
+                                .HasPrecision(18, 2)
+                                .HasColumnType("numeric(18,2)")
+                                .HasColumnName("salary");
+
+                            b1.Property<DateTime>("UpdatedAt")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("updated_at")
+                                .HasDefaultValueSql("now()");
+
+                            b1.Property<string>("WorkAddress")
+                                .HasColumnType("jsonb")
+                                .HasColumnName("work_address");
+
+                            b1.HasKey("Id");
+
+                            b1.HasIndex("CustomerId");
+
+                            b1.ToTable("customer_work_info", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("CustomerId");
+                        });
+
+                    b.Navigation("CustomerAddresses");
+
+                    b.Navigation("CustomerEmails");
+
+                    b.Navigation("CustomerFiscalInfos");
+
+                    b.Navigation("CustomerPhones");
+
+                    b.Navigation("CustomerWorkInfos");
                 });
 
             modelBuilder.Entity("Crm.Domain.Customers.CustomerDocument", b =>
@@ -1363,54 +1141,6 @@ namespace Crm.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("customer_documents_customer_id_fkey");
-
-                    b.Navigation("Customer");
-                });
-
-            modelBuilder.Entity("Crm.Domain.Customers.CustomerEmail", b =>
-                {
-                    b.HasOne("Crm.Domain.Customers.Customer", "Customer")
-                        .WithMany("CustomerEmails")
-                        .HasForeignKey("CustomerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("customer_emails_customer_id_fkey");
-
-                    b.Navigation("Customer");
-                });
-
-            modelBuilder.Entity("Crm.Domain.Customers.CustomerFiscalInfo", b =>
-                {
-                    b.HasOne("Crm.Domain.Customers.Customer", "Customer")
-                        .WithMany("CustomerFiscalInfos")
-                        .HasForeignKey("CustomerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("customer_fiscal_info_customer_id_fkey");
-
-                    b.Navigation("Customer");
-                });
-
-            modelBuilder.Entity("Crm.Domain.Customers.CustomerPhone", b =>
-                {
-                    b.HasOne("Crm.Domain.Customers.Customer", "Customer")
-                        .WithMany("CustomerPhones")
-                        .HasForeignKey("CustomerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("customer_phones_customer_id_fkey");
-
-                    b.Navigation("Customer");
-                });
-
-            modelBuilder.Entity("Crm.Domain.Customers.CustomerWorkInfo", b =>
-                {
-                    b.HasOne("Crm.Domain.Customers.Customer", "Customer")
-                        .WithMany("CustomerWorkInfos")
-                        .HasForeignKey("CustomerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("customer_work_info_customer_id_fkey");
 
                     b.Navigation("Customer");
                 });
@@ -1427,64 +1157,296 @@ namespace Crm.Infrastructure.Migrations
                     b.Navigation("Document");
                 });
 
-            modelBuilder.Entity("Crm.Domain.Prospects.ProspectAddress", b =>
+            modelBuilder.Entity("Crm.Domain.Prospects.Prospect", b =>
                 {
-                    b.HasOne("Crm.Domain.Prospects.Prospect", "Prospect")
-                        .WithMany("Addresses")
-                        .HasForeignKey("ProspectId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("prospect_addresses_prospect_id_fkey");
+                    b.OwnsMany("Crm.Domain.ValueObjects.Address", "Addresses", b1 =>
+                        {
+                            b1.Property<Guid>("Id")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("uuid")
+                                .HasColumnName("id")
+                                .HasDefaultValueSql("uuid_generate_v4()");
 
-                    b.Navigation("Prospect");
-                });
+                            b1.Property<string>("City")
+                                .HasColumnType("text")
+                                .HasColumnName("city");
 
-            modelBuilder.Entity("Crm.Domain.Prospects.ProspectEmail", b =>
-                {
-                    b.HasOne("Crm.Domain.Prospects.Prospect", "Prospect")
-                        .WithMany("Emails")
-                        .HasForeignKey("ProspectId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("prospect_emails_prospect_id_fkey");
+                            b1.Property<string>("Country")
+                                .HasColumnType("text")
+                                .HasColumnName("country");
 
-                    b.Navigation("Prospect");
-                });
+                            b1.Property<DateTime>("CreatedAt")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("created_at")
+                                .HasDefaultValueSql("now()");
 
-            modelBuilder.Entity("Crm.Domain.Prospects.ProspectFiscalInfo", b =>
-                {
-                    b.HasOne("Crm.Domain.Prospects.Prospect", "Prospect")
-                        .WithMany("FiscalInfos")
-                        .HasForeignKey("ProspectId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("prospect_fiscal_info_prospect_id_fkey");
+                            b1.Property<string>("District")
+                                .HasColumnType("text")
+                                .HasColumnName("district");
 
-                    b.Navigation("Prospect");
-                });
+                            b1.Property<bool?>("IsPrimary")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("boolean")
+                                .HasDefaultValue(false)
+                                .HasColumnName("is_primary");
 
-            modelBuilder.Entity("Crm.Domain.Prospects.ProspectPhone", b =>
-                {
-                    b.HasOne("Crm.Domain.Prospects.Prospect", "Prospect")
-                        .WithMany("Phones")
-                        .HasForeignKey("ProspectId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("prospect_phones_prospect_id_fkey");
+                            b1.Property<string>("Metadata")
+                                .HasColumnType("jsonb")
+                                .HasColumnName("metadata");
 
-                    b.Navigation("Prospect");
-                });
+                            b1.Property<string>("PostalCode")
+                                .HasColumnType("text")
+                                .HasColumnName("postal_code");
 
-            modelBuilder.Entity("Crm.Domain.Prospects.ProspectWorkInfo", b =>
-                {
-                    b.HasOne("Crm.Domain.Prospects.Prospect", "Prospect")
-                        .WithMany("WorkInfos")
-                        .HasForeignKey("ProspectId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("prospect_work_info_prospect_id_fkey");
+                            b1.Property<Guid>("ProspectId")
+                                .HasColumnType("uuid")
+                                .HasColumnName("prospect_id");
 
-                    b.Navigation("Prospect");
+                            b1.Property<string>("State")
+                                .HasColumnType("text")
+                                .HasColumnName("state");
+
+                            b1.Property<string>("Street")
+                                .HasColumnType("text")
+                                .HasColumnName("street");
+
+                            b1.Property<string>("Type")
+                                .HasColumnType("text")
+                                .HasColumnName("type");
+
+                            b1.Property<DateTime>("UpdatedAt")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("updated_at")
+                                .HasDefaultValueSql("now()");
+
+                            b1.HasKey("Id");
+
+                            b1.HasIndex("ProspectId");
+
+                            b1.ToTable("prospect_addresses", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("ProspectId");
+                        });
+
+                    b.OwnsMany("Crm.Domain.ValueObjects.EmailContact", "Emails", b1 =>
+                        {
+                            b1.Property<Guid>("Id")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("uuid")
+                                .HasColumnName("id")
+                                .HasDefaultValueSql("uuid_generate_v4()");
+
+                            b1.Property<DateTime>("CreatedAt")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("created_at")
+                                .HasDefaultValueSql("now()");
+
+                            b1.Property<string>("Email")
+                                .IsRequired()
+                                .HasColumnType("text")
+                                .HasColumnName("email");
+
+                            b1.Property<bool?>("IsPrimary")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("boolean")
+                                .HasDefaultValue(false)
+                                .HasColumnName("is_primary");
+
+                            b1.Property<Guid>("ProspectId")
+                                .HasColumnType("uuid")
+                                .HasColumnName("prospect_id");
+
+                            b1.Property<bool?>("Verified")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("boolean")
+                                .HasDefaultValue(false)
+                                .HasColumnName("verified");
+
+                            b1.HasKey("Id");
+
+                            b1.HasIndex("ProspectId");
+
+                            b1.ToTable("prospect_emails", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("ProspectId");
+                        });
+
+                    b.OwnsMany("Crm.Domain.ValueObjects.FiscalInfo", "FiscalInfos", b1 =>
+                        {
+                            b1.Property<Guid>("Id")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("uuid")
+                                .HasColumnName("id")
+                                .HasDefaultValueSql("uuid_generate_v4()");
+
+                            b1.Property<DateTime>("CreatedAt")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("created_at")
+                                .HasDefaultValueSql("now()");
+
+                            b1.Property<string>("EconomicActivity")
+                                .HasColumnType("text")
+                                .HasColumnName("economic_activity");
+
+                            b1.Property<string>("Industry")
+                                .HasColumnType("text")
+                                .HasColumnName("industry");
+
+                            b1.Property<string>("Metadata")
+                                .HasColumnType("jsonb")
+                                .HasColumnName("metadata");
+
+                            b1.Property<Guid>("ProspectId")
+                                .HasColumnType("uuid")
+                                .HasColumnName("prospect_id");
+
+                            b1.Property<string>("TaxId")
+                                .HasColumnType("text")
+                                .HasColumnName("tax_id");
+
+                            b1.Property<string>("TaxRegime")
+                                .HasColumnType("text")
+                                .HasColumnName("tax_regime");
+
+                            b1.Property<DateTime>("UpdatedAt")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("updated_at")
+                                .HasDefaultValueSql("now()");
+
+                            b1.HasKey("Id");
+
+                            b1.HasIndex("ProspectId");
+
+                            b1.ToTable("prospect_fiscal_info", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("ProspectId");
+                        });
+
+                    b.OwnsMany("Crm.Domain.ValueObjects.PhoneContact", "Phones", b1 =>
+                        {
+                            b1.Property<Guid>("Id")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("uuid")
+                                .HasColumnName("id")
+                                .HasDefaultValueSql("uuid_generate_v4()");
+
+                            b1.Property<string>("CountryCode")
+                                .HasColumnType("text")
+                                .HasColumnName("country_code");
+
+                            b1.Property<DateTime>("CreatedAt")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("created_at")
+                                .HasDefaultValueSql("now()");
+
+                            b1.Property<bool?>("IsPrimary")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("boolean")
+                                .HasDefaultValue(false)
+                                .HasColumnName("is_primary");
+
+                            b1.Property<string>("Number")
+                                .IsRequired()
+                                .HasColumnType("text")
+                                .HasColumnName("number");
+
+                            b1.Property<Guid>("ProspectId")
+                                .HasColumnType("uuid")
+                                .HasColumnName("prospect_id");
+
+                            b1.Property<string>("Type")
+                                .HasColumnType("text")
+                                .HasColumnName("type");
+
+                            b1.Property<bool?>("Verified")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("boolean")
+                                .HasDefaultValue(false)
+                                .HasColumnName("verified");
+
+                            b1.HasKey("Id");
+
+                            b1.HasIndex("ProspectId");
+
+                            b1.ToTable("prospect_phones", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("ProspectId");
+                        });
+
+                    b.OwnsMany("Crm.Domain.ValueObjects.WorkInfo", "WorkInfos", b1 =>
+                        {
+                            b1.Property<Guid>("Id")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("uuid")
+                                .HasColumnName("id")
+                                .HasDefaultValueSql("uuid_generate_v4()");
+
+                            b1.Property<DateTime>("CreatedAt")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("created_at")
+                                .HasDefaultValueSql("now()");
+
+                            b1.Property<string>("EmployerName")
+                                .HasColumnType("text")
+                                .HasColumnName("employer_name");
+
+                            b1.Property<string>("Metadata")
+                                .HasColumnType("jsonb")
+                                .HasColumnName("metadata");
+
+                            b1.Property<string>("Occupation")
+                                .HasColumnType("text")
+                                .HasColumnName("occupation");
+
+                            b1.Property<Guid>("ProspectId")
+                                .HasColumnType("uuid")
+                                .HasColumnName("prospect_id");
+
+                            b1.Property<decimal?>("Salary")
+                                .HasPrecision(18, 2)
+                                .HasColumnType("numeric(18,2)")
+                                .HasColumnName("salary");
+
+                            b1.Property<DateTime>("UpdatedAt")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("updated_at")
+                                .HasDefaultValueSql("now()");
+
+                            b1.Property<string>("WorkAddress")
+                                .HasColumnType("text")
+                                .HasColumnName("work_address");
+
+                            b1.HasKey("Id");
+
+                            b1.HasIndex("ProspectId");
+
+                            b1.ToTable("prospect_work_info", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("ProspectId");
+                        });
+
+                    b.Navigation("Addresses");
+
+                    b.Navigation("Emails");
+
+                    b.Navigation("FiscalInfos");
+
+                    b.Navigation("Phones");
+
+                    b.Navigation("WorkInfos");
                 });
 
             modelBuilder.Entity("Crm.Domain.RiskEngine.RiskMatrixRule", b =>
@@ -1532,35 +1494,12 @@ namespace Crm.Infrastructure.Migrations
 
             modelBuilder.Entity("Crm.Domain.Customers.Customer", b =>
                 {
-                    b.Navigation("CustomerAddresses");
-
                     b.Navigation("CustomerDocuments");
-
-                    b.Navigation("CustomerEmails");
-
-                    b.Navigation("CustomerFiscalInfos");
-
-                    b.Navigation("CustomerPhones");
-
-                    b.Navigation("CustomerWorkInfos");
                 });
 
             modelBuilder.Entity("Crm.Domain.Documents.Document", b =>
                 {
                     b.Navigation("Validations");
-                });
-
-            modelBuilder.Entity("Crm.Domain.Prospects.Prospect", b =>
-                {
-                    b.Navigation("Addresses");
-
-                    b.Navigation("Emails");
-
-                    b.Navigation("FiscalInfos");
-
-                    b.Navigation("Phones");
-
-                    b.Navigation("WorkInfos");
                 });
 
             modelBuilder.Entity("Crm.Domain.RiskEngine.RiskEvaluation", b =>

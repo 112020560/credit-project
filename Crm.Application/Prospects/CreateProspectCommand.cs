@@ -1,12 +1,14 @@
+using System.Text.Json;
 using Crm.Application.Abstractions.Messaging;
-using Crm.Application.Abstractions.Mq;
 using Crm.Application.Prospects.Dtos;
 using Crm.Domain.Abstractions.Persistence;
 using Crm.Domain.Prospects;
+using Crm.Domain.ValueObjects;
 using FluentValidation;
 using Microsoft.Extensions.Logging;
 using SharedKernel;
-using SharedKernel.Contracts.Crm.Customers;
+using SmartCore.Outbox.Abstractions;
+using SmartCore.Outbox.Models;
 
 namespace Crm.Application.Prospects;
 
@@ -15,7 +17,7 @@ public record CreateProspectCommand(CreateProspectDto Dto) : ICommand<ProspectSu
 internal sealed class CreateProspectCommandHandler(
     ILogger<CreateProspectCommandHandler> logger,
     IUnitOfWork unitOfWork,
-    IMqProducerService mqProducerService)
+    IOutboxWriter outbox)
     : ICommandHandler<CreateProspectCommand, ProspectSummaryDto>
 {
     public async Task<Result<ProspectSummaryDto>> Handle(CreateProspectCommand request, CancellationToken cancellationToken)
@@ -39,35 +41,30 @@ internal sealed class CreateProspectCommandHandler(
             Status = ProspectStatus.Draft,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
-            Phones = [.. (dto.Contacts ?? []).Where(c => c.Type == "Phone").Select(c => new ProspectPhone
-            {
-                Id = Guid.CreateVersion7(),
-                Type = c.Type,
-                Number = c.Value,
-                IsPrimary = c.IsPrimary,
-                Verified = false,
-                CreatedAt = DateTime.UtcNow,
-            })],
-            Emails = [.. (dto.Contacts ?? []).Where(c => c.Type == "Email").Select(c => new ProspectEmail
-            {
-                Id = Guid.CreateVersion7(),
-                Email = c.Value,
-                IsPrimary = c.IsPrimary,
-                Verified = false,
-                CreatedAt = DateTime.UtcNow,
-            })],
+            Phones = [.. (dto.Contacts ?? []).Where(c => c.Type == "Phone").Select(c => new PhoneContact(c.Value, c.Type, null, c.IsPrimary, false))],
+            Emails = [.. (dto.Contacts ?? []).Where(c => c.Type == "Email").Select(c => new EmailContact(c.Value, c.IsPrimary, false))],
         };
 
         await unitOfWork.ProspectsRepository.AddAsync(prospect, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        await mqProducerService.PublishEvent(new { ProspectId = prospect.Id, prospect.FullName, prospect.Status }, Guid.NewGuid().ToString("N"), cancellationToken);
+        await outbox.AppendAsync(new OutboxEvent
+        {
+            ServiceName      = "crm",
+            AggregateId      = prospect.Id,
+            AggregateType    = "Prospect",
+            EventType        = "ProspectCreated",
+            DeduplicationKey = $"ProspectCreated:{prospect.Id}",
+            Payload          = JsonSerializer.Serialize(new ProspectCreatedEvent(prospect.Id, prospect.FullName, prospect.Status.ToString()))
+        }, cancellationToken);
 
         logger.LogInformation("Prospect {ProspectId} created for {IdentificationNumber}", prospect.Id, prospect.IdentificationNumber);
 
         return new ProspectSummaryDto(prospect.Id, prospect.FullName, prospect.DisplayName, prospect.IdentificationNumber, prospect.Status);
     }
 }
+
+public record ProspectCreatedEvent(Guid ProspectId, string FullName, string Status);
 
 internal sealed class CreateProspectCommandValidator : AbstractValidator<CreateProspectCommand>
 {

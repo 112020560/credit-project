@@ -1,6 +1,4 @@
-using System;
-
-namespace Crm.Domain.Customers;
+namespace Crm.Application.Customers.Dtos;
 
 public class CustomerModel
 {

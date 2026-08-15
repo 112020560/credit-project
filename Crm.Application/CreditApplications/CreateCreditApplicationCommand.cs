@@ -1,5 +1,5 @@
+using System.Text.Json;
 using Crm.Application.Abstractions.Messaging;
-using Crm.Application.Abstractions.Mq;
 using Crm.Application.CreditApplications.Dtos;
 using Crm.Domain.Abstractions.Persistence;
 using Crm.Domain.CreditApplications;
@@ -7,6 +7,8 @@ using Crm.Domain.Prospects;
 using FluentValidation;
 using SharedKernel;
 using SharedKernel.Contracts.Crm.CreditApplications;
+using SmartCore.Outbox.Abstractions;
+using SmartCore.Outbox.Models;
 
 namespace Crm.Application.CreditApplications;
 
@@ -14,7 +16,7 @@ public record CreateCreditApplicationCommand(CreateCreditApplicationDto Dto) : I
 
 internal sealed class CreateCreditApplicationCommandHandler(
     IUnitOfWork unitOfWork,
-    IMqProducerService mqProducerService)
+    IOutboxWriter outbox)
     : ICommandHandler<CreateCreditApplicationCommand, CreditApplicationDetailDto>
 {
     public async Task<Result<CreditApplicationDetailDto>> Handle(CreateCreditApplicationCommand request, CancellationToken cancellationToken)
@@ -38,7 +40,15 @@ internal sealed class CreateCreditApplicationCommandHandler(
         await unitOfWork.CreditApplicationsRepository.AddAsync(application, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        await mqProducerService.PublishEvent(new CreditApplicationCreatedContract { ApplicationId = application.Id, ProspectId = application.ProspectId, Status = application.Status.ToString() }, Guid.NewGuid().ToString("N"), cancellationToken);
+        await outbox.AppendAsync(new OutboxEvent
+        {
+            ServiceName      = "crm",
+            AggregateId      = application.Id,
+            AggregateType    = "CreditApplication",
+            EventType        = "CreditApplicationCreated",
+            DeduplicationKey = $"CreditApplicationCreated:{application.Id}",
+            Payload          = JsonSerializer.Serialize(new CreditApplicationCreatedContract { ApplicationId = application.Id, ProspectId = application.ProspectId, Status = application.Status.ToString() })
+        }, cancellationToken);
 
         return ToDto(application);
     }

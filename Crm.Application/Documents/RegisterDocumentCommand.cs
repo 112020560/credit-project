@@ -1,16 +1,18 @@
+using System.Text.Json;
 using Crm.Application.Abstractions.Messaging;
-using Crm.Application.Abstractions.Mq;
 using Crm.Application.Documents.Dtos;
 using Crm.Domain.Abstractions.Persistence;
 using Crm.Domain.Documents;
 using FluentValidation;
 using SharedKernel;
+using SmartCore.Outbox.Abstractions;
+using SmartCore.Outbox.Models;
 
 namespace Crm.Application.Documents;
 
 public record RegisterDocumentCommand(RegisterDocumentDto Dto) : ICommand<DocumentDetailDto>;
 
-internal sealed class RegisterDocumentCommandHandler(IUnitOfWork unitOfWork, IMqProducerService mqProducerService)
+internal sealed class RegisterDocumentCommandHandler(IUnitOfWork unitOfWork, IOutboxWriter outbox)
     : ICommandHandler<RegisterDocumentCommand, DocumentDetailDto>
 {
     public async Task<Result<DocumentDetailDto>> Handle(RegisterDocumentCommand request, CancellationToken cancellationToken)
@@ -34,10 +36,15 @@ internal sealed class RegisterDocumentCommandHandler(IUnitOfWork unitOfWork, IMq
         await unitOfWork.DocumentsRepository.AddAsync(document, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var traceId = Guid.NewGuid().ToString("N");
-        await mqProducerService.PublishEvent(
-            new DocumentUploadedContract(document.Id, document.OwnerId, document.OwnerType, document.DocumentTypeCode, document.StorageUrl, document.UploadedAt),
-            traceId, cancellationToken);
+        await outbox.AppendAsync(new OutboxEvent
+        {
+            ServiceName      = "crm",
+            AggregateId      = document.Id,
+            AggregateType    = "Document",
+            EventType        = "DocumentUploaded",
+            DeduplicationKey = $"DocumentUploaded:{document.Id}",
+            Payload          = JsonSerializer.Serialize(new DocumentUploadedContract(document.Id, document.OwnerId, document.OwnerType, document.DocumentTypeCode, document.StorageUrl, document.UploadedAt))
+        }, cancellationToken);
 
         return ToDto(document);
     }

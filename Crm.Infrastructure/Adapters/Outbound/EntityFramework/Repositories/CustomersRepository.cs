@@ -1,5 +1,6 @@
 using Crm.Domain.Abstractions.Persistence;
 using Crm.Domain.Customers;
+
 using Microsoft.EntityFrameworkCore;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Query.Expressions.Internal;
 
@@ -26,25 +27,27 @@ public class CustomersRepository : ICustomersRepository
             .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
     }
 
+    public async Task<Customer?> GetForUpdateAsync(Guid id, CancellationToken cancellationToken)
+    {
+        return await _context.Customers
+            .AsTracking()
+            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+    }
+
     public Task UpdateCustomerAsync(Customer customer, CancellationToken cancellationToken)
     {
         _context.Customers.Update(customer);
         return Task.CompletedTask;
     }
 
-    public async Task<List<Customer>> GetAllCustomersAsync(CancellationToken cancellationToken)
-    {
-        return await _context.Customers.ToListAsync(cancellationToken);
-    }
-
     public async Task<(List<Customer> Items, int TotalCount)> SearchAsync(
-        string? query, int page, int pageSize, CancellationToken cancellationToken)
+        CustomerSearchCriteria criteria, CancellationToken cancellationToken)
     {
         var baseQuery = _context.Customers.AsQueryable();
 
-        if (!string.IsNullOrWhiteSpace(query))
+        if (!string.IsNullOrWhiteSpace(criteria.Query))
         {
-            var pattern = $"%{query.Trim()}%";
+            var pattern = $"%{criteria.Query.Trim()}%";
             baseQuery = baseQuery.Where(c =>
                 EF.Functions.ILike(c.FullName, pattern) ||
                 (c.DisplayName != null && EF.Functions.ILike(c.DisplayName, pattern)) ||
@@ -55,8 +58,8 @@ public class CustomersRepository : ICustomersRepository
 
         var items = await baseQuery
             .OrderBy(c => c.FullName)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+            .Skip((criteria.Page - 1) * criteria.PageSize)
+            .Take(criteria.PageSize)
             .Include(c => c.CustomerEmails)
             .Include(c => c.CustomerPhones)
             .ToListAsync(cancellationToken);

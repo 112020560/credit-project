@@ -1,6 +1,7 @@
 using Crm.Application.Abstractions.Messaging;
 using Crm.Application.Customers.Dtos;
 using Crm.Domain.Abstractions.Persistence;
+using Crm.Domain.Customers;
 using SharedKernel;
 
 namespace Crm.Application.Customers;
@@ -17,7 +18,7 @@ internal sealed class SearchCustomersQueryHandler(IUnitOfWork unitOfWork)
         var pageSize = request.PageSize is < 1 or > 100 ? 20 : request.PageSize;
 
         var (items, total) = await unitOfWork.CustomersRepository
-            .SearchAsync(request.Query, page, pageSize, cancellationToken);
+            .SearchAsync(new CustomerSearchCriteria(request.Query, page, pageSize), cancellationToken);
 
         var dtos = items.Select(c => new CustomerSearchResultDto(
             c.Id,

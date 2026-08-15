@@ -2,6 +2,7 @@ using Crm.Application.Abstractions.Messaging;
 using Crm.Application.Prospects.Dtos;
 using Crm.Domain.Abstractions.Persistence;
 using Crm.Domain.Prospects;
+using Crm.Domain.ValueObjects;
 using FluentValidation;
 using SharedKernel;
 
@@ -27,19 +28,19 @@ internal sealed class EnrichProspectCommandHandler(IUnitOfWork unitOfWork)
         foreach (var contact in dto.Contacts ?? [])
         {
             if (contact.Type == "Phone")
-                prospect.Phones.Add(new ProspectPhone { Type = contact.Type, Number = contact.Value, IsPrimary = contact.IsPrimary, Verified = false, CreatedAt = now });
+                prospect.Phones.Add(new PhoneContact(contact.Value, contact.Type, null, contact.IsPrimary, false));
             else if (contact.Type == "Email")
-                prospect.Emails.Add(new ProspectEmail { Email = contact.Value, IsPrimary = contact.IsPrimary, Verified = false, CreatedAt = now });
+                prospect.Emails.Add(new EmailContact(contact.Value, contact.IsPrimary, false));
         }
 
         foreach (var address in dto.Addresses ?? [])
-            prospect.Addresses.Add(new ProspectAddress { Type = address.Type, Street = address.Street, City = address.City, State = address.State, Country = address.Country, PostalCode = address.PostalCode, IsPrimary = address.IsPrimary, CreatedAt = now, UpdatedAt = now });
+            prospect.Addresses.Add(new Address(address.Type, address.Street, address.City, address.State, address.Country, address.PostalCode, address.IsPrimary));
 
         foreach (var work in dto.WorkInfos ?? [])
-            prospect.WorkInfos.Add(new ProspectWorkInfo { Occupation = work.Occupation, EmployerName = work.EmployerName, Salary = work.Salary, CreatedAt = now, UpdatedAt = now });
+            prospect.WorkInfos.Add(new WorkInfo(work.Occupation, work.EmployerName, work.Salary));
 
         foreach (var fiscal in dto.FiscalInfos ?? [])
-            prospect.FiscalInfos.Add(new ProspectFiscalInfo { TaxId = fiscal.TaxId, TaxRegime = fiscal.TaxRegime, EconomicActivity = fiscal.EconomicActivity, Industry = fiscal.Industry, CreatedAt = now, UpdatedAt = now });
+            prospect.FiscalInfos.Add(new FiscalInfo(fiscal.TaxId, fiscal.TaxRegime, fiscal.EconomicActivity, fiscal.Industry));
 
         prospect.UpdatedAt = now;
         await unitOfWork.ProspectsRepository.UpdateAsync(prospect, cancellationToken);

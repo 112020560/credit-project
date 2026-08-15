@@ -24,11 +24,11 @@ internal sealed class ActivateWorkflowDefinitionCommandHandler(IUnitOfWork unitO
         var activeDefinitions = await unitOfWork.WorkflowDefinitionsRepository.GetAllActiveAsync(cancellationToken);
         foreach (var active in activeDefinitions)
         {
-            active.Status = WorkflowStatus.Superseded;
+            active.Deactivate();
             await unitOfWork.WorkflowDefinitionsRepository.UpdateAsync(active, cancellationToken);
         }
 
-        definition.Status = WorkflowStatus.Active;
+        definition.Activate();
         await unitOfWork.WorkflowDefinitionsRepository.UpdateAsync(definition, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 

@@ -1,6 +1,9 @@
+using Crm.Domain.RiskEngine.Events;
+using SharedKernel;
+
 namespace Crm.Domain.RiskEngine;
 
-public class RiskMatrix
+public class RiskMatrix : AggregateRoot
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = null!;
@@ -12,6 +15,13 @@ public class RiskMatrix
     public DateTime CreatedAt { get; set; }
 
     public virtual ICollection<RiskMatrixRule> MatrixRules { get; set; } = new List<RiskMatrixRule>();
+
+    public Result Activate()
+    {
+        Status = RiskMatrixStatus.Active;
+        RaiseDomainEvent(new RiskMatrixActivatedEvent(Id));
+        return Result.Success();
+    }
 }
 
 public class PricingBand

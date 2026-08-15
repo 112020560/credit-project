@@ -1,11 +1,13 @@
+using System.Text.Json;
 using Crm.Application.Abstractions.Messaging;
-using Crm.Application.Abstractions.Mq;
 using Crm.Application.RiskEngine.Dtos;
 using Crm.Domain.Abstractions.Persistence;
 using Crm.Domain.CreditApplications;
 using Crm.Domain.RiskEngine;
 using FluentValidation;
 using SharedKernel;
+using SmartCore.Outbox.Abstractions;
+using SmartCore.Outbox.Models;
 
 namespace Crm.Application.RiskEngine;
 
@@ -14,7 +16,7 @@ public record TriggerRiskEvaluationCommand(TriggerRiskEvaluationDto Dto) : IComm
 internal sealed class TriggerRiskEvaluationCommandHandler(
     IUnitOfWork unitOfWork,
     RiskEvaluationService riskEvaluationService,
-    IMqProducerService mqProducerService)
+    IOutboxWriter outbox)
     : ICommandHandler<TriggerRiskEvaluationCommand, RiskEvaluationDto>
 {
     public async Task<Result<RiskEvaluationDto>> Handle(TriggerRiskEvaluationCommand request, CancellationToken cancellationToken)
@@ -36,25 +38,41 @@ internal sealed class TriggerRiskEvaluationCommandHandler(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var traceId = Guid.NewGuid().ToString("N");
-        await mqProducerService.PublishEvent(new RiskEvaluationStartedContract
+        await outbox.AppendAsync(new OutboxEvent
         {
-            RiskEvaluationId = evaluation.Id,
-            CreditApplicationId = evaluation.CreditApplicationId,
-            RiskMatrixId = evaluation.RiskMatrixId,
-            RiskMatrixVersion = evaluation.RiskMatrixVersion,
-            StartedAt = evaluation.EvaluatedAt
-        }, traceId, cancellationToken);
-        await mqProducerService.PublishEvent(new RiskEvaluationCompletedContract
+            ServiceName      = "crm",
+            AggregateId      = evaluation.CreditApplicationId,
+            AggregateType    = "CreditApplication",
+            EventType        = "RiskEvaluationStarted",
+            DeduplicationKey = $"RiskEvaluationStarted:{evaluation.CreditApplicationId}",
+            Payload          = JsonSerializer.Serialize(new RiskEvaluationStartedContract
+            {
+                RiskEvaluationId    = evaluation.Id,
+                CreditApplicationId = evaluation.CreditApplicationId,
+                RiskMatrixId        = evaluation.RiskMatrixId,
+                RiskMatrixVersion   = evaluation.RiskMatrixVersion,
+                StartedAt           = evaluation.EvaluatedAt
+            })
+        }, cancellationToken);
+
+        await outbox.AppendAsync(new OutboxEvent
         {
-            RiskEvaluationId = evaluation.Id,
-            CreditApplicationId = evaluation.CreditApplicationId,
-            RiskMatrixId = evaluation.RiskMatrixId,
-            RiskMatrixVersion = evaluation.RiskMatrixVersion,
-            TotalScore = evaluation.TotalScore,
-            Outcome = evaluation.Outcome.ToString(),
-            CompletedAt = evaluation.EvaluatedAt
-        }, traceId, cancellationToken);
+            ServiceName      = "crm",
+            AggregateId      = evaluation.CreditApplicationId,
+            AggregateType    = "CreditApplication",
+            EventType        = "RiskEvaluationCompleted",
+            DeduplicationKey = $"RiskEvaluationCompleted:{evaluation.CreditApplicationId}:{DateTime.UtcNow:yyyyMMddHHmmssfff}",
+            Payload          = JsonSerializer.Serialize(new RiskEvaluationCompletedContract
+            {
+                RiskEvaluationId    = evaluation.Id,
+                CreditApplicationId = evaluation.CreditApplicationId,
+                RiskMatrixId        = evaluation.RiskMatrixId,
+                RiskMatrixVersion   = evaluation.RiskMatrixVersion,
+                TotalScore          = evaluation.TotalScore,
+                Outcome             = evaluation.Outcome.ToString(),
+                CompletedAt         = evaluation.EvaluatedAt
+            })
+        }, cancellationToken);
 
         return ToDto(evaluation);
     }

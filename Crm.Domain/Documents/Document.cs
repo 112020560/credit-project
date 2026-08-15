@@ -1,6 +1,13 @@
 namespace Crm.Domain.Documents;
 
-public class Document
+public class 
+    
+    
+    
+    
+    
+    
+    Document
 {
     public Guid Id { get; set; }
     public Guid OwnerId { get; set; }

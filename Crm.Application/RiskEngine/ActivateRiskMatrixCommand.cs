@@ -27,7 +27,7 @@ internal sealed class ActivateRiskMatrixCommandHandler(IUnitOfWork unitOfWork)
             await unitOfWork.RiskMatrixRepository.UpdateAsync(current, cancellationToken);
         }
 
-        matrix.Status = RiskMatrixStatus.Active;
+        matrix.Activate();
         await unitOfWork.RiskMatrixRepository.UpdateAsync(matrix, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 

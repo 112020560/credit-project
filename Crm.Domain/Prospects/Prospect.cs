@@ -1,6 +1,10 @@
+using Crm.Domain.Prospects.Events;
+using Crm.Domain.ValueObjects;
+using SharedKernel;
+
 namespace Crm.Domain.Prospects;
 
-public class Prospect
+public class Prospect : AggregateRoot
 {
     public Guid Id { get; set; }
     public string IdentificationType { get; set; } = null!;
@@ -12,9 +16,42 @@ public class Prospect
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 
-    public virtual ICollection<ProspectAddress> Addresses { get; set; } = new List<ProspectAddress>();
-    public virtual ICollection<ProspectPhone> Phones { get; set; } = new List<ProspectPhone>();
-    public virtual ICollection<ProspectEmail> Emails { get; set; } = new List<ProspectEmail>();
-    public virtual ICollection<ProspectWorkInfo> WorkInfos { get; set; } = new List<ProspectWorkInfo>();
-    public virtual ICollection<ProspectFiscalInfo> FiscalInfos { get; set; } = new List<ProspectFiscalInfo>();
+    public virtual ICollection<Address> Addresses { get; set; } = new List<Address>();
+    public virtual ICollection<PhoneContact> Phones { get; set; } = new List<PhoneContact>();
+    public virtual ICollection<EmailContact> Emails { get; set; } = new List<EmailContact>();
+    public virtual ICollection<WorkInfo> WorkInfos { get; set; } = new List<WorkInfo>();
+    public virtual ICollection<FiscalInfo> FiscalInfos { get; set; } = new List<FiscalInfo>();
+
+    public Result Submit()
+    {
+        if (Status != ProspectStatus.Draft)
+            return Result.Failure(ProspectError.InvalidTransition(Status, ProspectStatus.Submitted));
+
+        Status = ProspectStatus.Submitted;
+        UpdatedAt = DateTime.UtcNow;
+        RaiseDomainEvent(new ProspectSubmittedEvent(Id));
+        return Result.Success();
+    }
+
+    public Result Convert()
+    {
+        if (Status != ProspectStatus.Submitted)
+            return Result.Failure(ProspectError.InvalidTransition(Status, ProspectStatus.Converted));
+
+        Status = ProspectStatus.Converted;
+        UpdatedAt = DateTime.UtcNow;
+        RaiseDomainEvent(new ProspectConvertedEvent(Id));
+        return Result.Success();
+    }
+
+    public Result Reject()
+    {
+        if (Status != ProspectStatus.Submitted)
+            return Result.Failure(ProspectError.InvalidTransition(Status, ProspectStatus.Draft));
+
+        Status = ProspectStatus.Draft;
+        UpdatedAt = DateTime.UtcNow;
+        RaiseDomainEvent(new ProspectRejectedEvent(Id));
+        return Result.Success();
+    }
 }
