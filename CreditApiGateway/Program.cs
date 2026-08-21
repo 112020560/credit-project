@@ -1,3 +1,5 @@
+using Scalar.AspNetCore;
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddReverseProxy()
@@ -6,5 +8,11 @@ builder.Services.AddReverseProxy()
 var app = builder.Build();
 
 app.MapReverseProxy();
+
+app.MapScalarApiReference(options =>
+{
+    options.OpenApiRoutePattern = "/swagger/v1/swagger.json";
+    options.Title = "Credit API Gateway";
+});
 
 app.Run();
