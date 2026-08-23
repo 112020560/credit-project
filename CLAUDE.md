@@ -19,6 +19,7 @@ dotnet test Src/Core/CreditSystem.Tests/CreditSystem.Tests.csproj
 ```
 
 > **No EF Core migrations** — the project uses Dapper + raw Npgsql. Schema is managed manually.
+> This applies to `Src/Core` and `Src/Shared` only. `Src/Crm` uses EF Core — see `Src/Crm/CLAUDE.md` for its own conventions, which take precedence for code under that path. `Src/Gateway` has no CLAUDE.md of its own yet.
 
 ## Architecture
 
@@ -36,6 +37,10 @@ Src/
   Shared/
     SharedKernel               — Messaging contracts (CustomerCreated, CustomerUpdated, payment messages)
     SmartCore.Telemetry        — OpenTelemetry + Serilog configuration
+  Crm/
+    Crm.Domain, Crm.Application, Crm.Infrastructure, Crm.WebApi — CRM subsystem (EF Core based). See Src/Crm/CLAUDE.md.
+  Gateway/
+    CreditApiGateway           — YARP reverse proxy in front of the backend APIs
 ```
 
 ### Dependency Graph
